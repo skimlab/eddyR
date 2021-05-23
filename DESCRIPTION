@@ -1,0 +1,16 @@
+Package: eddyR
+Type: Package
+Title: Evaluation of Differential DependencY (R implementation)
+Version: 0.1.0
+Authors@R: person("Seungchan", "Kim", email = "dolchan@gmail.com",
+                  role = c("aut", "cre"))
+Maintainer: The package maintainer <yourself@somewhere.net>
+Description: This is an R implementation of EDDY (Evaluation of 
+    Differential DependencY), with a few major improvements over
+    Java implementation (NAR 2014, PSB 2016 & 2017) and EDDY-GPU.
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    Rmagic (>= 1.5.0),
+    TDA (>= 1.6.5)
