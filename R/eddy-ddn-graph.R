@@ -125,11 +125,11 @@ compute_DDN_mediator_specificity <- function(ddn, p_val.cutoff = 0.05) {
   }) %>% unlist -> pbinom_vals
 
   data.frame(name = nodes,
-             mediator.specificity.phyper_val = phyper_vals,
-             mediator.specificity.pbinom_val = pbinom_vals,
-             mediator.specificity.phyper_val.fdr = p.adjust(phyper_vals, method = "fdr"),
-             mediator.specificity.pbinom_val.fdr = p.adjust(pbinom_vals, method = "fdr")) %>%
-    mutate(mediator.specificity = mediator.specificity.pbinom_val.fdr < p_val.cutoff)
+             mediator_specificity_phyper_val = phyper_vals,
+             mediator_specificity_pbinom_val = pbinom_vals,
+             mediator_specificity_phyper_val.fdr = p.adjust(phyper_vals, method = "fdr"),
+             mediator_specificity_pbinom_val.fdr = p.adjust(pbinom_vals, method = "fdr")) %>%
+    mutate(mediator_specificity = mediator_specificity_pbinom_val.fdr < p_val.cutoff)
 }
 
 
@@ -169,7 +169,7 @@ compute_DDN_mediator_essentiality <- function(ddn, percentile_cutoff = 0.05) {
   cutoff.p <- quantile(nodes_mediator_essentiality[["diff"]], 1-percentile_cutoff/2)
 
   nodes_mediator_essentiality %>%
-    mutate(mediator.essentiality = diff < cutoff.n | diff > cutoff.p)
+    mutate(mediator_essentiality = diff < cutoff.n | diff > cutoff.p)
 }
 
 
@@ -182,23 +182,23 @@ compute_DDN_mediators <- function(ddn, mediator.type = "both") {
 
   full_join(
     ddn_essentiality %>%
-      select(name, mediator.essentiality),
+      select(name, mediator_essentiality),
     ddn_specificty %>%
-      select(name, mediator.specificity),
+      select(name, mediator_specificity),
     by = "name"
   ) %>%
     replace_na(list(
-      mediator.essentiality = FALSE,
-      mediator.specificity = FALSE
+      mediator_essentiality = FALSE,
+      mediator_specificity = FALSE
     )) %>%
     mutate(none = "none") %>%
-    mutate(essentiality = c("none", "essentiality")[as.integer(mediator.essentiality) + 1]) %>%
-    mutate(specificity = c("none", "specificity")[as.integer(mediator.specificity) + 1]) %>%
-    mutate(both = c("none", "specificity", "essentiality", "dual")[as.integer(mediator.essentiality) * 2 +
-                                                                     as.integer(mediator.specificity) + 1]) ->
+    mutate(essentiality = c("none", "essentiality")[as.integer(mediator_essentiality) + 1]) %>%
+    mutate(specificity = c("none", "specificity")[as.integer(mediator_specificity) + 1]) %>%
+    mutate(both = c("none", "specificity", "essentiality", "dual")[as.integer(mediator_essentiality) * 2 +
+                                                                     as.integer(mediator_specificity) + 1]) ->
     res
-  #    mutate(is_mediator = mediator.essentiality |
-  #             mediator.specificity)
+  #    mutate(is_mediator = mediator_essentiality |
+  #             mediator_specificity)
   res[["mediator"]] <- res[[mediator.type]]
 
   # clean up and return
@@ -308,7 +308,7 @@ plot_DDN_graph <- function(ddn_graph,
   if ("mediator" %in% colnames(nodes_df)) {
     ddn_graph %>%
       activate(nodes) %>%
-      mutate(name.mediator = ifelse(mediator != "none", name, NA)) ->
+      mutate(name_mediator = ifelse(mediator != "none", name, NA)) ->
       ddn_graph
 
     nodes_df <- ddn_graph %>% activate(nodes) %>% data.frame
@@ -316,11 +316,11 @@ plot_DDN_graph <- function(ddn_graph,
     show_mediator_label <- FALSE
   }
 
-  conditions.unique <-
+  conditions_unique <-
     setdiff(toupper(unique(edges_df$condition)), "BOTH")
   edge_colors.c <-
-    c("seagreen", "tomato", "royalblue", "orange")[1:length(conditions.unique)]
-  names(edge_colors.c) <- conditions.unique
+    c("seagreen", "tomato", "royalblue", "orange")[1:length(conditions_unique)]
+  names(edge_colors.c) <- conditions_unique
   edge_colors <-
     c("BOTH" = "gray", edge_colors.c)
 
@@ -365,7 +365,7 @@ plot_DDN_graph <- function(ddn_graph,
     gp <- gp + geom_node_label(aes(label = name, fill = mediator))
   } else if (show_mediator_label) {
     gp <-
-      gp + geom_node_label(aes(label = name.mediator, fill = mediator))
+      gp + geom_node_label(aes(label = name_mediator, fill = mediator))
   }
 
   gp <-

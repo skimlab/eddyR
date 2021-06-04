@@ -1,3 +1,5 @@
+# EDDY Post-processing -----
+
 #' Post process EDDY-GPU outputs
 #'
 #' @param eddy_run_dir ...
@@ -75,63 +77,213 @@ post_proc_EDDY <-
           }
         )
 
+      # Full DDNs
       eddy_post_proc_list[["DDN_graph_aggregated"]] <-
-        plot_DDN_tbl_graph(
-          eddy_post_proc_list[["DDNs"]],
-          show_mediators = mediator_tbl,
-          show_node_label = FALSE,
-          show_pathway_group = TRUE
-        )
-
-      eddy_post_proc_list[["DDN_graph_aggregated_1"]] <-
         plot_DDN_tbl_graph(
           eddy_post_proc_list[["DDNs"]],
           show_mediators = "both",
           show_node_label = FALSE,
           show_pathway_group = TRUE
         )
+
+      # DDNs, P < 0.05
+      eddy_post_proc_list[["summary"]] %>%
+        filter(P< 0.05) %>%
+        select(pathway) %>%
+        unlist %>% unname ->
+        pathway_list
+
+      eddy_post_proc_list[["DDNs"]] %>%
+        filter(pathway %in% pathway_list) %>%
+        plot_DDN_tbl_graph(
+          show_mediators = "both",
+          show_node_label = FALSE,
+          show_pathway_group = TRUE
+        ) ->
+        eddy_post_proc_list[["DDN_graph_aggregated_p0_05"]]
+
     }
 
     eddy_post_proc_list
   }
 
 
-#' Write EDDY post-processed results
+
+
+#' Write EDDY post-processed results and DDNs into PDF
 #'
-#' @param eddy_post_processed ...
+#' @param eddy_postproc ...
 #' @param out_dir ...
 #' @param fig.width ...
 #' @param fig.height ...
 #' @return ...s
-write_eddy_post_processed <- function(eddy_post_processed, out_dir = ".", fig.width = 12, fig.height = 9) {
-  if ("DDNs" %in% names(eddy_post_processed)) {
-    readr::write_csv(eddy_post_processed$DDNs, file = file.path(out_dir, "DDNs.csv"))
+write_eddy_postproc_pdf <- function(eddy_postproc, out_dir = ".", fig.width = 12, fig.height = 9) {
+  if ("DDNs" %in% names(eddy_postproc)) {
+    readr::write_csv(eddy_postproc$DDNs, file = file.path(out_dir, "DDNs.csv"))
   }
 
-  if ("summary" %in% names(eddy_post_processed)) {
-    eddy_post_processed$summary %>%
+  if ("summary" %in% names(eddy_postproc)) {
+    eddy_postproc$summary %>%
       select(-ends_with(".l")) %>%
       readr::write_csv(file = file.path(out_dir, "summary.csv"))
   }
 
-  if ("list_DDN_graph" %in% names(eddy_post_processed)) {
-    for (nn in names(eddy_post_processed$list_DDN_graph)) {
+  if ("list_DDN_graph" %in% names(eddy_postproc)) {
+    for (nn in names(eddy_postproc$list_DDN_graph)) {
       ggsave(filename = file.path(out_dir, sprintf("DDN_%s.pdf", nn)),
-             plot = eddy_post_processed$list_DDN_graph[[nn]],
+             plot = eddy_postproc$list_DDN_graph[[nn]],
              width = fig.width, height = fig.height)
     }
   }
 
-  if ("DDN_graph.aggregated" %in% names(eddy_post_processed)) {
-    ggsave(filename = file.path(out_dir, "aggregated_DDNs_separate_mediators.pdf"),
-           plot = eddy_post_processed$DDN_graph_aggregated,
+  if ("DDN_graph_aggregated_p0_05" %in% names(eddy_postproc)) {
+    ggsave(filename = file.path(out_dir, "aggregated_DDNs_p0_05.pdf"),
+           plot = eddy_postproc$DDN_graph_aggregated_p0_05,
            width = 2*fig.width, height = 2*fig.height)
   }
 
-  if ("DDN_graph_aggregated_1" %in% names(eddy_post_processed)) {
-    ggsave(filename = file.path(out_dir, "aggregated_DDNs_collected_mediators.pdf"),
-           plot = eddy_post_processed$DDN_graph_aggregated_1,
+  if ("DDN_graph_aggregated" %in% names(eddy_postproc)) {
+    ggsave(filename = file.path(out_dir, "aggregated_DDNs.pdf"),
+           plot = eddy_postproc$DDN_graph_aggregated,
            width = 2*fig.width, height = 2*fig.height)
   }
 }
 
+
+#' Write EDDY DDNs into JSON
+#'
+#' @param eddy_postproc list: ...
+#' @param json_dir string: ...
+#' @return ...s
+write_eddy_postproc_json <- function(eddy_postproc, json_dir = ".") {
+  #
+  pathway_list <- unique(eddy_postproc$DDNs$pathway)
+
+  for (a_pathway in pathway_list) {
+    eddy_postproc$DDNs %>%
+      filter(pathway == a_pathway) %>%
+      ddn_to_json(filepath = json_dir)
+  }
+
+  #
+  p_val_max <- max(eddy_postproc$summary$P)
+
+  eddy_postproc$summary %>%
+    filter(P< 0.05) %>%
+    select(pathway) %>%
+    unlist %>% unname ->
+    pathway_list
+
+  eddy_postproc$DDNs %>%
+    filter(pathway %in% pathway_list) %>%
+    ddn_to_json(filepath = file.path(json_dir, "aggregated_p0_05.json"))
+
+  aggregated_markdown <-
+    paste(
+      "# GBAp PD vs GBAp Unaffected\n",
+      "### Aggregated DDNs (could be slow)\n",
+      "<a href=\"ddngraph.html?DDN=aggregated_p0_05\" target=\"_blank\">DDNs (P.val < 0.05)</a>",
+      sep = "\n")
+
+  if (p_val_max > 0.05) {
+    eddy_postproc$DDNs %>%
+      ddn_to_json(filepath = file.path(json_dir, "aggregated.json"))
+
+    aggregated_markdown <-
+      paste(
+        aggregated_markdown,
+        "| <a href=\"ddngraph.html?DDN=aggregated\" target=\"_blank\">DDNs (Full)</a>\n",
+        sep = "\n")
+  }
+
+  eddy_postproc[["summary"]] %>%
+    mutate(specificity_mediators_html.l = add_GeneCard_link(specificity_mediators.l, style = "html"),
+           essentiality_mediators_html.l = add_GeneCard_link(essentiality_mediators.l, style = "html")) %>%
+    mutate(specificity_mediators_html = paste(specificity_mediators_html.l, collapse = ", "),
+           essentiality_mediators_html = paste(essentiality_mediators_html.l, collapse = ", ")) ->
+    eddy_postproc[["summary"]]
+
+  eddy_postproc[["aggregated_markdown"]] <- aggregated_markdown
+
+  eddy_postproc
+}
+
+#' Write summary table in markdown format
+#'
+#' @param eddy_postproc list: ...
+#' @param output_dir string: ...
+#' @return ...s
+write_eddy_summary_table_markdown <- function(eddy_postproc, output_dir) {
+  eddy_postproc$summary %>%
+    select(pathway, n_actual, known_dependency, rewiring, JS, P, essentiality_mediators_html.l, specificity_mediators_html.l) %>%
+    rename(n = n_actual,
+           P.value = P,
+           'known dependency (%)' = known_dependency,
+           'rewiring (%)' = rewiring,
+           'essentiality mediators' = essentiality_mediators_html.l,
+           'specificity mediators' = specificity_mediators_html.l) %>%
+    mutate(DDN = DDN_link(pathway, style = "html")) %>%
+    mutate(pathway = MSigDB_link(pathway, style = "html")) %>%
+    arrange(P.value) %>%
+    kable(format = "markdown") -> summary_table_markdown
+
+  eddy_postproc[["summary_table_markdown"]] <-
+    c(eddy_postproc[["aggregated_markdown"]],
+      summary_table_markdown)
+
+  eddy_postproc[["summary_table_markdown"]] %>%
+    write(file = file.path(output_dir, "summary_table.md"))
+
+  eddy_postproc
+}
+
+
+# Utility functions -----
+#
+
+#' Capitalize words
+capwords <- function(s, strict = FALSE) {
+  cap <- function(s) paste(toupper(substring(s, 1, 1)),
+                           {s <- substring(s, 2); if(strict) tolower(s) else s},
+                           sep = "", collapse = " " )
+  sapply(strsplit(s, split = " "), cap, USE.NAMES = !is.null(names(s)))
+}
+
+#' Create DDN link
+DDN_link <- function(pathway, style = c("markdown", "html")) {
+  style <- style[1]
+
+  if (style == "markdown") {
+    sprintf('[DDN](ddngraph.html?DDN=%s)', pathway)
+  } else {
+    sprintf('<a href="ddngraph.html?DDN=%s" target="_blank">DDN</a>', pathway)
+  }
+}
+
+#' Create MSigDB link
+MSigDB_link <- function(pathway, style = c("markdown", "html")) {
+  style <- style[1]
+
+  if (style == "markdown") {
+    sprintf('[%s](https://www.gsea-msigdb.org/gsea/msigdb/cards/%s.html)', reactome_cleanup(pathway), pathway)
+  } else {
+    sprintf('<a href="https://www.gsea-msigdb.org/gsea/msigdb/cards/%s.html" target="_blank">%s</a>', pathway, reactome_cleanup(pathway))
+  }
+}
+
+#' Add GeneCard link
+add_GeneCard_link <- function(geneNames, style = c("markdown", "html")) {
+  style <- style[1]
+
+  add_link <- function(gene, style) {
+    if (style == "markdown") {
+      sprintf('[%s](https://www.genecards.org/cgi-bin/carddisp.pl?gene=%s)', gene, gene)
+    } else {
+      sprintf('<a href="https://www.genecards.org/cgi-bin/carddisp.pl?gene=%s" target="_blank">%s</a>', gene, gene)
+    }
+  }
+
+  lapply(geneNames,
+         add_link,
+         style)
+}

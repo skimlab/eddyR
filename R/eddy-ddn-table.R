@@ -31,10 +31,10 @@ reactome_cleanup <- function(pathway_name) {
 #' @param p a pathway line in summary table
 #' @return expanded summary table
 expand_mediators <- function(p) {
-  mediator_list <- list(essentiality = (p$Essentiality.Mediators %>% unlist %>% unique()),
-                        specificity = (p$Specificity.Mediators %>% unlist %>% unique()))
+  mediator_list <- list(essentiality = (p$Essentiality_Mediators %>% unlist %>% unique()),
+                        specificity = (p$Specificity_Mediators %>% unlist %>% unique()))
 
-  right_join(select(p, -c(Essentiality.Mediators, Specificity.Mediators)),
+  right_join(select(p, -c(Essentiality_Mediators, Specificity_Mediators)),
              tibble(Pathway = p$Pathway,
                     mediator = (unlist(mediator_list) %>% unique() %>% as.vector)) %>%
                mutate(essentiality = mediator %in% mediator_list$essentiality,
@@ -51,12 +51,12 @@ flatten_DDN_mediators <- function(mediator_tbl) {
     mediator_tbl %>%
       filter(mediator != "none") %>%
       summarise(
-        essentiality.mediators.l = list(name[mediator.essentiality]),
-        specificity.mediators.l = list(name[mediator.specificity])
+        essentiality_mediators.l = list(name[mediator_essentiality]),
+        specificity_mediators.l = list(name[mediator_specificity])
       ) %>%
       mutate(
-        essentiality.mediators = paste(unlist(essentiality.mediators.l), collapse = " "),
-        specificity.mediators = paste(unlist(specificity.mediators.l), collapse = " ")
+        essentiality_mediators = paste(unlist(essentiality_mediators.l), collapse = ", "),
+        specificity_mediators = paste(unlist(specificity_mediators.l), collapse = ", ")
       ) %>%
       select(ends_with("mediators"), ends_with(".l"))
   }
@@ -68,6 +68,10 @@ flatten_DDN_mediators <- function(mediator_tbl) {
 }
 
 
+#' Add GeneCard to mediators
+add_GeneCard_to_mediators <- function(mediator_tbl) {
+
+}
 
 #' Parse mediator string
 #'
@@ -113,10 +117,10 @@ get_mediators <- function(p, type = "both") {
   mediators <- c()
 
   if ("specificity" %in% types)
-    mediators <- union(mediators, unlist(parse_mediators(p$specificity.mediators)))
+    mediators <- union(mediators, unlist(parse_mediators(p$specificity_mediators)))
 
   if ("essentiality" %in% types)
-    mediators <- union(mediators, unlist(parse_mediators(p$essentiality.mediators)))
+    mediators <- union(mediators, unlist(parse_mediators(p$essentiality_mediators)))
 
   mm <- unique(mediators[!is.na(mediators)])
   mm[stringr::str_length(mm) > 0]
