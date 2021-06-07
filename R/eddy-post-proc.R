@@ -222,10 +222,12 @@ write_eddy_summary_table_markdown <- function(eddy_postproc, output_dir) {
            'rewiring (%)' = rewiring,
            'essentiality mediators' = essentiality_mediators_html.l,
            'specificity mediators' = specificity_mediators_html.l) %>%
-    mutate(DDN = DDN_link(pathway, style = "html")) %>%
-    mutate(pathway = MSigDB_link(pathway, style = "html")) %>%
+    mutate(DDN = add_DDN_link(pathway, style = "html")) %>%
+    mutate(pathway = add_MSigDB_link(pathway, style = "html")) %>%
     arrange(P.value) %>%
-    kable(format = "markdown") -> summary_table_markdown
+    kable(format = "markdown") %>%
+    gsub("[' ']+,", ",", .) ->      # to get rid of extra spaces between words
+    summary_table_markdown
 
   eddy_postproc[["summary_table_markdown"]] <-
     c(eddy_postproc[["aggregated_markdown"]],
@@ -250,7 +252,7 @@ capwords <- function(s, strict = FALSE) {
 }
 
 #' Create DDN link
-DDN_link <- function(pathway, style = c("markdown", "html")) {
+add_DDN_link <- function(pathway, style = c("markdown", "html")) {
   style <- style[1]
 
   if (style == "markdown") {
@@ -261,7 +263,7 @@ DDN_link <- function(pathway, style = c("markdown", "html")) {
 }
 
 #' Create MSigDB link
-MSigDB_link <- function(pathway, style = c("markdown", "html")) {
+add_MSigDB_link <- function(pathway, style = c("markdown", "html")) {
   style <- style[1]
 
   if (style == "markdown") {
@@ -275,15 +277,13 @@ MSigDB_link <- function(pathway, style = c("markdown", "html")) {
 add_GeneCard_link <- function(geneNames, style = c("markdown", "html")) {
   style <- style[1]
 
-  add_link <- function(gene, style) {
-    if (style == "markdown") {
-      sprintf('[%s](https://www.genecards.org/cgi-bin/carddisp.pl?gene=%s)', gene, gene)
-    } else {
-      sprintf('<a href="https://www.genecards.org/cgi-bin/carddisp.pl?gene=%s" target="_blank">%s</a>', gene, gene)
-    }
-  }
-
   lapply(geneNames,
-         add_link,
+         function(gene, style) {
+           if (style == "markdown") {
+             sprintf('[%s](https://www.genecards.org/cgi-bin/carddisp.pl?gene=%s)', gene, gene)
+           } else {
+             sprintf('<a href="https://www.genecards.org/cgi-bin/carddisp.pl?gene=%s" target="_blank">%s</a>', gene, gene)
+           }
+         },
          style)
 }
