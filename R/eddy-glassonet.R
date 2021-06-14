@@ -30,8 +30,8 @@ calc_DDN_score <- function(ddn_tbl) {
   conditions <- unique(ddn_tbl_c$condition)
 
   # number of edges in G1 and G2
-  n1 <- ddn_tbl %>% filter(condition == conditions[1] | toupper(condition) == "BOTH") %>% nrow
-  n2 <- ddn_tbl %>% filter(condition == conditions[2] | toupper(condition) == "BOTH") %>% nrow
+  n1 <- ddn_tbl %>% filter(condition == conditions[1] | toupper(condition) == "BOTH") %>% nrow()
+  n2 <- ddn_tbl %>% filter(condition == conditions[2] | toupper(condition) == "BOTH") %>% nrow()
   q <- nrow(ddn_tbl_s)
   n <- n1 + n2 - q
 
@@ -423,8 +423,8 @@ to_glassonet <- function(gls) {
     name = gls$name,
     glasso = gls,
     precision = gls$wi,
-    pcorr = gls$wi %>% wi2net %>% as.matrix,
-    el_df = gls$wi %>% to_edge_list
+    pcorr = gls$wi %>% qgraph::wi2net() %>% as.matrix(),
+    el_df = gls$wi %>% to_edge_list()
   )
   class(l) <- "glassonet"
 
@@ -520,8 +520,8 @@ create_folds <- function(samples, k) {
   if (leftover > 0) {
     bagsz[1:leftover] <- bagsz[1:leftover] + 1
   }
-  sx <- c(1, bagsz[-length(bagsz)]) %>% cumsum
-  ex <- bagsz %>% cumsum
+  sx <- c(1, bagsz[-length(bagsz)]) %>% cumsum()
+  ex <- bagsz %>% cumsum()
 
   lapply(1:length(sx),
          function(i) {

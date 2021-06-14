@@ -14,12 +14,12 @@ LazyData: true
 Imports: 
     matrixStats,
     matrixcalc,
-    qgraph,
     progressr
 Depends:
     tidyverse,
     tidygraph,
     igraph,
+    qgraph,
     ggraph,
     ggrepel
 Suggests:
