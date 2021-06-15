@@ -73,9 +73,9 @@ ddn_to_json <- function(ddn_tbl, filepath = NULL, return_JSON = FALSE) {
     paste(collapse = ", ") ->
     my_pathway_json
 
-  # convert condition to [C1, C2, and Both]
-  condition_names <- c("Both", setdiff(unique(ddn_tbl$condition), c("BOTH", "Both", "both")))
-  map_condition <- c("Both", "C1", "C2")[1:length(condition_names)]
+  # convert condition to [C1, C2, and common]
+  condition_names <- c("common", setdiff(unique(ddn_tbl$condition), c("Common", "COMMON", "common")))
+  map_condition <- c("common", "C1", "C2")[1:length(condition_names)]
   reverse_map_condition <- condition_names
   names(reverse_map_condition) <- map_condition
   names(map_condition) <- condition_names
@@ -102,7 +102,7 @@ ddn_to_json <- function(ddn_tbl, filepath = NULL, return_JSON = FALSE) {
     #  compute_DDN_mediators_by_pathway() %>%
     mutate(id = name) %>%
     mutate(mediator = ifelse(mediator == "none", "",
-                             paste(capwords(mediator), "mediator"))) %>%
+                             paste(capwords(as.character(mediator)), "mediator"))) %>%
     distinct(id, .keep_all = T) %>%
     #  select(-pathway) %>%
     left_join(gene_to_pathway, by = c("id" = "gene")) %>%

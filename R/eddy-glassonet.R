@@ -21,17 +21,17 @@ calc_DDN_score <- function(ddn_tbl) {
 
   ddn_tbl_c <-
     ddn_tbl %>%
-    filter(toupper(condition) != "BOTH")
+    filter(tolower(condition) != "common")
 
   ddn_tbl_s <-
     ddn_tbl %>%
-    filter(toupper(condition) == "BOTH")
+    filter(tolower(condition) == "common")
 
   conditions <- unique(ddn_tbl_c$condition)
 
   # number of edges in G1 and G2
-  n1 <- ddn_tbl %>% filter(condition == conditions[1] | toupper(condition) == "BOTH") %>% nrow()
-  n2 <- ddn_tbl %>% filter(condition == conditions[2] | toupper(condition) == "BOTH") %>% nrow()
+  n1 <- ddn_tbl %>% filter(condition == conditions[1] | tolower(condition) == "common") %>% nrow()
+  n2 <- ddn_tbl %>% filter(condition == conditions[2] | tolower(condition) == "common") %>% nrow()
   q <- nrow(ddn_tbl_s)
   n <- n1 + n2 - q
 
@@ -458,6 +458,27 @@ to_glasso_DDN <- function(glnet_list) {
 # internal -----
 #
 merge_edges_list_DDN <- function(edges_list) {
+  ddn_df <-
+    bind_rows(edges_list, .id = "condition")
+
+  if ("condition" %in% colnames(ddn_df)) {
+    ddn_df <- relocate(ddn_df, condition, .after = last_col())
+  } else {
+    return(NULL)
+  }
+
+  which_duplicated <- which(duplicated(ddn_df$edge_id))
+  duplicated_el <- ddn_df$edge_id[which_duplicated]
+
+  ddn_df %>%
+    mutate(condition = ifelse(edge_id %in% duplicated_el, "common", condition)) -> ddn_df
+
+  if (length(which_duplicated) > 0)
+    ddn_df <- ddn_df[-which_duplicated, ]
+  ddn_df
+}
+
+merge_edges_list_DDN_v1 <- function(edges_list) {
   el1 <- edges_list[[1]]
   el2 <- edges_list[[2]]
 
@@ -483,7 +504,7 @@ merge_edges_DDN <- function(el1, el2, c1, c2) {
   duplicated_el <- el$edge_id[which_duplicated]
 
   el %>%
-    mutate(condition = ifelse(edge_id %in% duplicated_el, "both", condition)) ->
+    mutate(condition = ifelse(edge_id %in% duplicated_el, "common", condition)) ->
     el
 
   if (length(which_duplicated) > 0)

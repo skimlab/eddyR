@@ -8,6 +8,7 @@ plot_DDN_graph(
   ddn_graph,
   group2node = NULL,
   graph_layout = "fr",
+  repel_node = FALSE,
   show_node_label = FALSE,
   show_mediator_label = TRUE
 )

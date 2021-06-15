@@ -58,7 +58,7 @@ add_mediators_to_DDN_graph <- function(ddn_graph, mediator_tbl) {
 
     # tidy up mediator table
     mediator_tbl %>%
-      filter(mediator != "none") %>%
+      # filter(mediator != "none") %>%
       distinct(name, mediator) ->
       mediator_tbl
 
@@ -79,7 +79,7 @@ add_mediators_to_DDN_graph <- function(ddn_graph, mediator_tbl) {
 #' @noRd
 compute_node_mediator_specificity_pbinom <- function(node_edges, p_background) {
   if (p_background < 1) {
-    pbinom(q = nrow(filter(node_edges, toupper(condition) != "BOTH")),
+    pbinom(q = nrow(filter(node_edges, tolower(condition) != "common")),
            size = nrow(node_edges),
            prob = p_background, lower.tail = FALSE)
   } else {
@@ -95,7 +95,7 @@ compute_node_mediator_specificity_pbinom <- function(node_edges, p_background) {
 #' @noRd
 compute_node_mediator_specificity_phyper <- function(node_edges, Ec, Es) {
   if (Ec > 0) {  # condition-specific edges exist
-    aNode_Ec <- nrow(filter(node_edges, toupper(condition) != "BOTH"))
+    aNode_Ec <- nrow(filter(node_edges, tolower(condition) != "common"))
     aNode_Es <- nrow(node_edges) - aNode_Ec
     phyper(q = aNode_Es, m = Es, n = Ec, k = aNode_Ec + aNode_Es)
   } else {
@@ -109,7 +109,7 @@ compute_node_mediator_specificity_phyper <- function(node_edges, Ec, Es) {
 compute_DDN_mediator_specificity <- function(ddn, p_val.cutoff = 0.05) {
   nodes <- union(ddn$node_src, ddn$node_dst)
 
-  Ec <- nrow(filter(ddn, toupper(condition) != "BOTH")) # no. of condition specific edges
+  Ec <- nrow(filter(ddn, tolower(condition) != "common")) # no. of condition specific edges
   Es <- nrow(ddn) - Ec  # no. of shared edges
 
   purrr::map(nodes, function(aNode) {
@@ -135,17 +135,17 @@ compute_DDN_mediator_specificity <- function(ddn, p_val.cutoff = 0.05) {
 
 #' Compute essentiality mediators for DDN
 compute_DDN_mediator_essentiality <- function(ddn, percentile_cutoff = 0.05) {
-  conditions <- unique(setdiff(ddn$condition, "BOTH"))
+  conditions <- unique(setdiff(ddn$condition, "common"))
 
   ddn %>%
-    filter(toupper(condition) == "BOTH" | condition == conditions[1]) %>%
+    filter(tolower(condition) == "common" | condition == conditions[1]) %>%
     as_DDN_graph %>%
     activate(nodes) %>%
     mutate(betweenness = centrality_betweenness(directed = FALSE)) %>%
     as.data.frame -> nodes_1
 
   ddn %>%
-    filter(toupper(condition) == "BOTH" | condition == conditions[2]) %>%
+    filter(tolower(condition) == "common" | condition == conditions[2]) %>%
     as_DDN_graph %>%
     activate(nodes) %>%
     mutate(betweenness = centrality_betweenness(directed = FALSE)) %>%
@@ -180,6 +180,18 @@ compute_DDN_mediators <- function(ddn, mediator.type = "both") {
   ddn_specificty <- compute_DDN_mediator_specificity(ddn)
   ddn_essentiality <- compute_DDN_mediator_essentiality(ddn)
 
+  # specificity mediator labels, as factors
+  spec_mediators <- c("none", "specificity")
+  spec_mediators <- factor(spec_mediators, levels = spec_mediators)
+
+  # essentiality mediator labels, as factors
+  essen_mediators <- c("none", "essentiality")
+  essen_mediators <- factor(essen_mediators, levels = essen_mediators)
+
+  # both mediator labels, as factors
+  both_mediators <- c("none", "specificity", "essentiality", "dual")
+  both_mediators <- factor(both_mediators, levels = both_mediators)
+
   full_join(
     ddn_essentiality %>%
       select(name, mediator_essentiality),
@@ -192,11 +204,10 @@ compute_DDN_mediators <- function(ddn, mediator.type = "both") {
       mediator_specificity = FALSE
     )) %>%
     mutate(none = "none") %>%
-    mutate(essentiality = c("none", "essentiality")[as.integer(mediator_essentiality) + 1]) %>%
-    mutate(specificity = c("none", "specificity")[as.integer(mediator_specificity) + 1]) %>%
-    mutate(both = c("none", "specificity", "essentiality", "dual")[as.integer(mediator_essentiality) * 2 +
-                                                                     as.integer(mediator_specificity) + 1]) ->
-    res
+    mutate(essentiality = essen_mediators[as.integer(mediator_essentiality) + 1]) %>%
+    mutate(specificity = spec_mediators[as.integer(mediator_specificity) + 1]) %>%
+    mutate(both = both_mediators[as.integer(mediator_essentiality) * 2 +
+                                 as.integer(mediator_specificity) + 1]) -> res
   #    mutate(is_mediator = mediator_essentiality |
   #             mediator_specificity)
   res[["mediator"]] <- res[[mediator.type]]
@@ -300,6 +311,7 @@ plot_DDN_tbl_graph <- function(ddn_tbl,
 plot_DDN_graph <- function(ddn_graph,
                            group2node = NULL,
                            graph_layout = "fr",
+                           repel_node = FALSE,
                            show_node_label = FALSE,
                            show_mediator_label = TRUE) {
   nodes_df <- ddn_graph %>% activate(nodes) %>% data.frame
@@ -308,21 +320,26 @@ plot_DDN_graph <- function(ddn_graph,
   if ("mediator" %in% colnames(nodes_df)) {
     ddn_graph %>%
       activate(nodes) %>%
-      mutate(name_mediator = ifelse(mediator != "none", name, NA)) ->
+      mutate(name_mediator = ifelse(mediator != "none", name, NA)) %>%
+      mutate(node_size = ifelse(mediator != "none", 0.5, 1)) ->
       ddn_graph
 
-    nodes_df <- ddn_graph %>% activate(nodes) %>% data.frame
+    nodes_df <- ddn_graph %>% activate(nodes) %>% data.frame()
   } else {
     show_mediator_label <- FALSE
+    ddn_graph %>%
+      activate(nodes) %>%
+      mutate(node_size = 0.5) ->
+      ddn_graph
   }
 
   conditions_unique <-
-    setdiff(toupper(unique(edges_df$condition)), "BOTH")
+    setdiff(toupper(unique(edges_df$condition)), "COMMON")
   edge_colors.c <-
     c("seagreen", "tomato", "royalblue", "orange")[1:length(conditions_unique)]
   names(edge_colors.c) <- conditions_unique
   edge_colors <-
-    c("BOTH" = "gray", edge_colors.c)
+    c("COMMON" = "gray", edge_colors.c)
 
   ddn_graph %>%
     ggraph(layout = graph_layout) -> gp
@@ -345,7 +362,7 @@ plot_DDN_graph <- function(ddn_graph,
   gp +
     scale_edge_color_manual(values = edge_colors) +
     scale_edge_linetype_manual(values = c("NONE" = "dotdash", "PRIOR" = "solid")) +
-    scale_edge_width_manual(values = c("Both" = 0.5, rep(.75, 10))) -> gp
+    scale_edge_width_manual(values = c("COMMON" = 0.5, rep(.75, 10))) -> gp
 
   if ("mediator" %in% colnames(nodes_df)) {
     # warning: Using size for a discrete variable is not advised.
@@ -362,10 +379,10 @@ plot_DDN_graph <- function(ddn_graph,
   }
 
   if (show_node_label) {
-    gp <- gp + geom_node_label(aes(label = name, fill = mediator))
+    gp <- gp + geom_node_label(aes(label = name, fill = mediator), repel = repel_node)
   } else if (show_mediator_label) {
     gp <-
-      gp + geom_node_label(aes(label = name_mediator, fill = mediator))
+      gp + geom_node_label(aes(label = name_mediator, fill = mediator), repel = repel_node)
   }
 
   gp <-

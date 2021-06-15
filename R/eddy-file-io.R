@@ -101,7 +101,7 @@ read_DDN_EdgeList <- function(ddn_filepath) {
     ),
     pathway = sub(postfix, "", f)
   ) %>%
-    mutate(condition = recode(codition, "Both" = "common", "BOTH" = "common", "both" = "common"))
+    mutate(condition = ifelse(condition %in% c("Both", "BOTH", "both"), "common", condition))
 }
 
 

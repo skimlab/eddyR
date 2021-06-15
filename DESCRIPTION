@@ -12,10 +12,10 @@ License: What license is it under?
 Encoding: UTF-8
 LazyData: true
 Imports: 
-    matrixStats,
     matrixcalc,
     progressr
 Depends:
+    ComplexHeatmap,
     tidyverse,
     tidygraph,
     igraph,

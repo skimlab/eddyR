@@ -29,7 +29,7 @@ post_proc_EDDY <-
       summarise(
         n_actual = length(union(node_src, node_dst)),
         known_dependency = sum(prior != "NONE") / n(),
-        rewiring = sum(toupper(condition) != "BOTH") / n()
+        rewiring = sum(tolower(condition) != "common") / n()
       ) %>%
       left_join(results_tbl, by = c("pathway" = "Pathway")) %>%
       rename(n_nodeset = n) %>%
