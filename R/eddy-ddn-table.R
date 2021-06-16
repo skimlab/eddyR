@@ -127,6 +127,10 @@ get_mediators <- function(p, type = "both") {
 }
 
 
+#' Generate summary table
+#'
+#' @param ddn_tbl data.frame
+#' @return summary table
 to_DDN_summary <- function(ddn_tbl) {
 
   geneset_terms <- unique(ddn_tbl$pathway)

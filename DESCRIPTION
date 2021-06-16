@@ -18,6 +18,8 @@ Depends:
     ComplexHeatmap,
     tidyverse,
     tidygraph,
+    knitr,
+    jsonlite,
     igraph,
     qgraph,
     ggraph,

@@ -2,9 +2,12 @@
 % Please edit documentation in R/eddy-post-proc.R
 \name{write_eddy_postproc_json}
 \alias{write_eddy_postproc_json}
+\alias{write_eddy_glasso_postproc_json}
 \title{Write EDDY DDNs into JSON}
 \usage{
 write_eddy_postproc_json(eddy_postproc, json_dir = ".")
+
+write_eddy_glasso_postproc_json(eddy_postproc, json_dir = ".")
 }
 \arguments{
 \item{eddy_postproc}{list: ...}

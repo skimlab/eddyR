@@ -118,7 +118,7 @@ read_DDNs <- function(path) {
          function(f, path) {
            read_DDN_EdgeList(file.path(path, f))
          },
-         path) %>% bind_rows
+         path) %>% bind_rows()
 }
 
 
