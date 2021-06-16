@@ -112,6 +112,117 @@ post_proc_EDDY_folder <-
   }
 
 
+#' Post process EDDY-glasso-DDN outputs
+#'
+#' @param glasso_DDN_list list of glasso DDNs
+#' @param create_ddn_graph logical (default is FALSE)
+#' @param mapping_samples_to_condition named vector
+#' @param db_name_prefix string, like REACTOME
+#' @return list of 1) summary tabla, 2) DDNs (data frame), 3) a list of DDN graphs,
+#'         4) aggregated DDN graph (full), and 5) aggregated DDN graph (p < 0.05)
+post_proc_EDDY_glasso <-
+  function(glasso_DDN_list,
+           create_ddn_graph = FALSE,
+           mapping_samples_to_condition = NULL,
+           db_name_prefix = NULL) {
+
+    p_val_threshold_loose <- 0.1
+    p_val_threshold_strict <- 0.05
+
+    summary_tbl <-
+      to_glasso_DDN_summary(glasso_DDN_list) %>%
+      filter(prob.adj < p_val_threshold_loose)
+
+    DDNs <- aggregate_DDN_table(glasso_DDN_list)
+
+    # DDNs, prob.adj < 0.10
+    pathway_list <-
+      summary_tbl %>%
+      filter(prob.adj < p_val_threshold_loose) %>%
+      select(pathway) %>%
+      unlist() %>% unname()
+
+    DDNs %>%
+      filter(pathway %in% pathway_list) -> DDNs
+
+    if (!is.null(mapping_samples_to_condition)) {
+      DDNs %>%
+        mutate(condition = mapping_samples_to_condition[condition]) -> DDNs
+    }
+
+
+    mediator_tbl <-
+      DDNs %>%
+      compute_DDN_mediators_by_pathway()
+
+    mediator_tbl %>%
+      flatten_DDN_mediators() %>%
+      left_join(summary_tbl, ., by = "pathway") -> summary_tbl
+
+    eddy_post_proc_list <- list(
+      summary = summary_tbl,
+      glasso_DDN_list = glasso_DDN_list,
+      DDNs = DDNs
+    )
+
+    if (!is.null(db_name_prefix)) {
+      eddy_post_proc_list[["summary"]] %>%
+        dplyr::mutate(pathway_orig = pathway) %>%
+        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) %>%
+        dplyr::relocate(pathway, .before = n_actual) %>%
+        dplyr::relocate(pathway_orig, .after = last_col()) ->
+        eddy_post_proc_list[["summary"]]
+
+      eddy_post_proc_list[["DDNs"]] %>%
+        dplyr::mutate(pathway_orig = pathway) %>%
+        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) ->
+        eddy_post_proc_list[["DDNs"]]
+    }
+
+    if (create_ddn_graph) {
+      eddy_post_proc_list[["list_DDN_graph"]] <-
+        split(eddy_post_proc_list[["DDNs"]],
+              eddy_post_proc_list[["DDNs"]]$pathway) %>%
+        lapply(
+          FUN = function(ddn) {
+            plot_DDN_tbl_graph(
+              ddn,
+              show_mediators = "both",
+              show_node_label = FALSE,
+              show_pathway_group = FALSE
+            ) +
+              ggtitle(ddn$pathway[1])
+          }
+        )
+
+
+      eddy_post_proc_list[["DDN_graph_aggregated"]] <-
+        plot_DDN_tbl_graph(
+          eddy_post_proc_list[["DDNs"]],
+          show_mediators = "both",
+          show_node_label = FALSE,
+          show_pathway_group = TRUE
+        )
+
+      # DDNs, prob.adj < 0.05
+      eddy_post_proc_list[["summary"]] %>%
+        filter(prob.adj < p_val_threshold_strict) %>%
+        select(pathway) %>%
+        unlist() %>% unname() ->
+        pathway_list
+
+      eddy_post_proc_list[["DDNs"]] %>%
+        filter(pathway %in% pathway_list) %>%
+        plot_DDN_tbl_graph(
+          show_mediators = "both",
+          show_node_label = FALSE,
+          show_pathway_group = TRUE
+        ) ->
+        eddy_post_proc_list[["DDN_graph_aggregated_p0_05"]]
+
+    }
+    eddy_post_proc_list
+  }
 
 
 #' Write EDDY post-processed results and DDNs into PDF
