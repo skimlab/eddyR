@@ -3,10 +3,11 @@
 ## How to install eddyR
 
 ```
-#Install devtools from CRAN
+# install devtools from CRAN
 install.packages("devtools")
 ```
 
 ```
+# install eddyR
 devtools::install_github("skimlab/eddyR")
 ```
