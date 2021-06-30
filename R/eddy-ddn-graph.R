@@ -335,11 +335,17 @@ plot_DDN_graph <- function(ddn_graph,
 
   conditions_unique <-
     setdiff(toupper(unique(edges_df$condition)), "COMMON")
+
   edge_colors.c <-
     c("seagreen", "tomato", "royalblue", "orange")[1:length(conditions_unique)]
   names(edge_colors.c) <- conditions_unique
   edge_colors <-
     c("COMMON" = "gray", edge_colors.c)
+
+  edge_widths.c <- rep(0.75, length(conditions_unique))
+  names(edge_widths.c) <- conditions_unique
+  edge_widths <-
+    c("COMMON" = 0.5, edge_widths.c)
 
   ddn_graph %>%
     ggraph(layout = graph_layout) -> gp
@@ -362,7 +368,7 @@ plot_DDN_graph <- function(ddn_graph,
   gp +
     scale_edge_color_manual(values = edge_colors) +
     scale_edge_linetype_manual(values = c("NONE" = "dotdash", "PRIOR" = "solid")) +
-    scale_edge_width_manual(values = c("COMMON" = 0.5, rep(.75, 10))) -> gp
+    scale_edge_width_manual(values = edge_widths) -> gp
 
   if ("mediator" %in% colnames(nodes_df)) {
     # warning: Using size for a discrete variable is not advised.
