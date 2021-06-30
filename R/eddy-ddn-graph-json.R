@@ -36,7 +36,11 @@ ddn_to_json <- function(ddn_tbl, filepath = NULL, return_JSON = FALSE) {
 
   # It's an output folder, not a filename
   if (!grepl(".json$", tolower(filepath))) {
-    filepath <- paste(file.path(filepath, paste(ddn_tbl$pathway[1], ".json", sep = "")))
+    filepath <-
+      paste(file.path(
+        filepath,
+        paste(ddn_tbl$pathway[1], ".json", sep = "")
+      ))
   }
 
   # Generate gene to pathway mapping, to group nodes/genes to pathway

@@ -118,8 +118,10 @@ post_proc_EDDY_folder <-
 #' @param create_ddn_graph logical (default is FALSE)
 #' @param mapping_samples_to_condition named vector
 #' @param db_name_prefix string, like REACTOME
-#' @return list of 1) summary tabla, 2) DDNs (data frame), 3) a list of DDN graphs,
-#'         4) aggregated DDN graph (full), and 5) aggregated DDN graph (p < 0.05)
+#' @return list of 1) summary tabla, 2) DDNs (data frame),
+#'         3) a list of DDN graphs,
+#'         4) aggregated DDN graph (full), and
+#'         5) aggregated DDN graph (p < 0.05)
 post_proc_EDDY_glasso <-
   function(glasso_DDN_list,
            create_ddn_graph = FALSE,
