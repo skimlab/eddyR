@@ -21,8 +21,10 @@ post_proc_EDDY_glasso(
 \item{db_name_prefix}{string, like REACTOME}
 }
 \value{
-list of 1) summary tabla, 2) DDNs (data frame), 3) a list of DDN graphs,
-        4) aggregated DDN graph (full), and 5) aggregated DDN graph (p < 0.05)
+list of 1) summary tabla, 2) DDNs (data frame),
+        3) a list of DDN graphs,
+        4) aggregated DDN graph (full), and
+        5) aggregated DDN graph (p < 0.05)
 }
 \description{
 Post process EDDY-glasso-DDN outputs

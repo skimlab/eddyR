@@ -234,10 +234,10 @@ post_proc_EDDY_glasso <-
 #' @param fig.width ...
 #' @param fig.height ...
 #' @return ...s
-write_eddy_postproc_pdf <- function(eddy_postproc, out_dir = ".", fig.width = 12, fig.height = 9) {
+write_eddy_postproc_pdf <- function(eddy_postproc, output_dir = ".", fig.width = 12, fig.height = 9) {
   # create out_dir.  If it already exists, show warnings.
   # shall we remove all the files if the folder exists before moving forward?
-  dir.create(out_dir, showWarnings = TRUE)
+  dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
 
 
   if ("DDNs" %in% names(eddy_postproc)) {
@@ -282,6 +282,10 @@ write_eddy_postproc_pdf <- function(eddy_postproc, out_dir = ".", fig.width = 12
 #' @param json_dir string: ...
 #' @return ...s
 write_eddy_postproc_json <- function(eddy_postproc, json_dir = ".") {
+  # create out_dir.  If it already exists, show warnings.
+  # shall we remove all the files if the folder exists before moving forward?
+  dir.create(json_dir, showWarnings = TRUE, recursive = TRUE)
+
   #
   pathway_list <- unique(eddy_postproc$DDNs$pathway)
 
@@ -340,6 +344,10 @@ write_eddy_postproc_json <- function(eddy_postproc, json_dir = ".") {
 
 #' @rdname write_eddy_postproc_json
 write_eddy_glasso_postproc_json <- function(eddy_postproc, json_dir = ".") {
+  # create out_dir.  If it already exists, show warnings.
+  # shall we remove all the files if the folder exists before moving forward?
+  dir.create(json_dir, showWarnings = TRUE, recursive = TRUE)
+
   #
   pathway_list <- unique(eddy_postproc$DDNs$pathway)
 
@@ -403,6 +411,10 @@ write_eddy_glasso_postproc_json <- function(eddy_postproc, json_dir = ".") {
 #' @param output_dir string: ...
 #' @return ...s
 write_eddy_summary_table_markdown <- function(eddy_postproc, output_dir) {
+  # create out_dir.  If it already exists, show warnings.
+  # shall we remove all the files if the folder exists before moving forward?
+  dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
+
   eddy_postproc$summary %>%
     select(pathway, n_actual, known_dependency, rewiring, JS, P, essentiality_mediators_html.l, specificity_mediators_html.l) %>%
     rename(n = n_actual,
@@ -433,6 +445,10 @@ write_eddy_summary_table_markdown <- function(eddy_postproc, output_dir) {
 #'
 #' @rdname write_eddy_summary_table_markdown
 write_eddy_glasso_summary_table_markdown <- function(eddy_postproc, output_dir) {
+  # create out_dir.  If it already exists, show warnings.
+  # shall we remove all the files if the folder exists before moving forward?
+  dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
+
   eddy_postproc$summary %>%
     select(pathway, n_actual, known_dependency, rewiring, prob.adj, essentiality_mediators_html.l, specificity_mediators_html.l) %>%
     rename(n = n_actual,

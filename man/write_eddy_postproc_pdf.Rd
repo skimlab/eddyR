@@ -6,7 +6,7 @@
 \usage{
 write_eddy_postproc_pdf(
   eddy_postproc,
-  out_dir = ".",
+  output_dir = ".",
   fig.width = 12,
   fig.height = 9
 )
@@ -14,11 +14,11 @@ write_eddy_postproc_pdf(
 \arguments{
 \item{eddy_postproc}{...}
 
-\item{out_dir}{...}
-
 \item{fig.width}{...}
 
 \item{fig.height}{...}
+
+\item{out_dir}{...}
 }
 \value{
 ...s
