@@ -235,6 +235,11 @@ post_proc_EDDY_glasso <-
 #' @param fig.height ...
 #' @return ...s
 write_eddy_postproc_pdf <- function(eddy_postproc, out_dir = ".", fig.width = 12, fig.height = 9) {
+  # create out_dir.  If it already exists, show warnings.
+  # shall we remove all the files if the folder exists before moving forward?
+  dir.create(out_dir, showWarnings = TRUE)
+
+
   if ("DDNs" %in% names(eddy_postproc)) {
     readr::write_csv(eddy_postproc$DDNs, file = file.path(out_dir, "DDNs.csv"))
   }
