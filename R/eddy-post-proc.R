@@ -1,61 +1,58 @@
 # EDDY Post-processing -----
 
 
-
-
-#' Post process EDDY-GPU outputs
+#' Post process EDDY DDNs and summary table
 #'
 #' @param eddy_run_dir string (path)
+#' @param glasso_DDN_list list of glasso DDNs
+#' @param summary_tbl data.frame
+#' @param DDNs data.frame (DDN table)
 #' @param create_ddn_graph logical (default is FALSE)
 #' @param mapping_samples_to_condition named vector
 #' @param db_name_prefix string, like REACTOME
-#' @return list of 1) summary tabla, 2) DDNs (data frame), 3) a list of DDN graphs,
-#'         4) aggregated DDN graph (full), and 5) aggregated DDN graph (p < 0.05)
-post_proc_EDDY_folder <-
-  function(eddy_run_dir,
+#' @return list of 1) summary tabla, 2) DDNs (data frame),
+#'         3) a list of DDN graphs,
+#'         4) aggregated DDN graph (full), and
+#'         5) aggregated DDN graph (p < 0.05)
+post_proc_EDDY_DDNs <-
+  function(DDNs,
+           summary_tbl,
            create_ddn_graph = FALSE,
-           mapping_samples_to_condition = NULL,
-           db_name_prefix = NULL) {
+           mapping_conditions = NA,
+           db_name_prefix = NA) {
 
-    results_tbl <- read_results_txt(eddy_run_dir) %>% arrange(P)
-    # (results_tbl <- mutate(results_tbl, Pathway = reactome_cleanup(Pathway)))
+    conditions <- setdiff(unique(DDNs$condition),
+                          c("common", "Common", "COMMON", "both", "Both", "BOTH"))
 
-    DDNs <- read_DDNs(eddy_run_dir) %>%
-      filter(condition != "Neither")
-
-    if (!is.null(mapping_samples_to_condition)) {
+    if (!isTRUE(is.na(mapping_conditions))) {
       DDNs <-
-        mutate(DDNs, condition = mapping_samples_to_condition[condition])
+        DDNs %>%
+        mutate(condition = mapping_conditions[condition]) %>%
+        mutate(condition = ifelse(is.na(condition), "common", condition))
+
+      conditions <- mapping_conditions[conditions]
     }
+    # DDNs (table done)
 
-    DDNs %>%
-      group_by(pathway) %>%
-      summarise(
-        n_actual = length(union(node_src, node_dst)),
-        known_dependency = sum(prior != "NONE") / n(),
-        rewiring = sum(tolower(condition) != "common") / n()
-      ) %>%
-      left_join(results_tbl, by = c("pathway" = "Pathway")) %>%
-      rename(n_nodeset = n) %>%
-      arrange(P) ->
-      results_tbl
-
-    DDNs %>%
-      compute_DDN_mediators_by_pathway() -> mediator_tbl
+    mediator_tbl <-
+      compute_DDN_mediators_by_pathway(DDNs)
 
     mediator_tbl %>%
       flatten_DDN_mediators() %>%
-      left_join(results_tbl, ., by = "pathway") ->
-      results_tbl
+      left_join(summary_tbl, ., by = "pathway") ->
+      summary_tbl
 
-    eddy_post_proc_list <- list(summary = results_tbl,
-                                DDNs = DDNs)
+    eddy_post_proc_list <- list(
+      summary = summary_tbl,
+      conditions = conditions,
+      DDNs = DDNs
+    )
 
-    if (!is.null(db_name_prefix)) {
+    if (!isTRUE(is.na(db_name_prefix))) {
       eddy_post_proc_list[["summary"]] %>%
         dplyr::mutate(pathway_orig = pathway) %>%
         dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) %>%
-        dplyr::relocate(pathway, .before = n_actual) %>%
+        dplyr::relocate(pathway, .before = n_nodes) %>%
         dplyr::relocate(pathway_orig, .after = last_col()) ->
         eddy_post_proc_list[["summary"]]
 
@@ -90,9 +87,9 @@ post_proc_EDDY_folder <-
           show_pathway_group = TRUE
         )
 
-      # DDNs, P < 0.05
+      # DDNs, prob < 0.05
       eddy_post_proc_list[["summary"]] %>%
-        filter(P< 0.05) %>%
+        filter(prob < 0.05) %>%
         select(pathway) %>%
         unlist() %>% unname() ->
         pathway_list
@@ -112,143 +109,126 @@ post_proc_EDDY_folder <-
   }
 
 
+#' Post process EDDY-GPU outputs
+#'
+#' @rdname post_proc_EDDY_DDNs
+post_proc_EDDY_folder <-
+  function(eddy_run_dir,
+           create_ddn_graph = FALSE,
+           mapping_conditions = NA,
+           db_name_prefix = NA) {
+    results_tbl <-
+      read_results_txt(eddy_run_dir) %>%
+      dplyr::rename(prob.raw = P) %>%
+      mutate(prob.adj = p.adjust(prob.raw)) %>%
+      mutate(prob = prob.raw) %>%    # for EDDY-GPU run, we will use prob, instead of prob.adj
+      arrange(prob)
+
+    # (results_tbl <- mutate(results_tbl, Pathway = reactome_cleanup(Pathway)))
+
+    DDNs <- read_DDNs(eddy_run_dir) %>%
+      filter(condition != "Neither")
+
+    conditions <- setdiff(unique(DDNs$condition),
+                          c("common", "Common", "COMMON", "both", "Both", "BOTH"))
+
+    DDNs %>%
+      group_by(pathway) %>%
+      summarise(
+        n_nodes = length(union(node_src, node_dst)),
+        n_edges_C1 = sum(tolower(condition) != conditions[1]),
+        n_edges_C2 = sum(tolower(condition) != conditions[2]),
+        n_edges_common = sum(tolower(condition) == "common"),
+        rewiring = sum(tolower(condition) != "common") / n(),
+        known_dependency = sum(prior != "NONE") / n()
+      ) %>%
+      left_join(results_tbl, by = c("pathway" = "Pathway")) %>%
+      rename(n_nodeset = n) %>%
+      filter(!is.na(prob)) %>%
+      arrange(prob) ->
+      summary_tbl
+
+    post_proc_EDDY_DDNs(
+      DDNs = DDNs,
+      summary_tbl = summary_tbl,
+      create_ddn_graph = create_ddn_graph,
+      mapping_conditions = mapping_conditions,
+      db_name_prefix = db_name_prefix
+    )
+  }
+
 #' Post process EDDY-glasso-DDN outputs
 #'
-#' @param glasso_DDN_list list of glasso DDNs
-#' @param create_ddn_graph logical (default is FALSE)
-#' @param mapping_samples_to_condition named vector
-#' @param db_name_prefix string, like REACTOME
-#' @return list of 1) summary tabla, 2) DDNs (data frame),
-#'         3) a list of DDN graphs,
-#'         4) aggregated DDN graph (full), and
-#'         5) aggregated DDN graph (p < 0.05)
+#' @rdname post_proc_EDDY_DDNs
 post_proc_EDDY_glasso <-
   function(glasso_DDN_list,
            create_ddn_graph = FALSE,
-           mapping_samples_to_condition = NULL,
-           db_name_prefix = NULL) {
+           mapping_conditions = NA,
+           db_name_prefix = NA) {
 
+    # p-value thresholds
     p_val_threshold_loose <- 0.1
     p_val_threshold_strict <- 0.05
 
     summary_tbl <-
       to_glasso_DDN_summary(glasso_DDN_list) %>%
-      filter(prob.adj < p_val_threshold_loose)
+      filter(prob < p_val_threshold_loose)
 
-    DDNs <- aggregate_DDN_table(glasso_DDN_list)
-
-    # DDNs, prob.adj < 0.10
+    # DDNs, prob < 0.10
     pathway_list <-
       summary_tbl %>%
-      filter(prob.adj < p_val_threshold_loose) %>%
+      filter(prob < p_val_threshold_loose) %>%
       select(pathway) %>%
       unlist() %>% unname()
+
+    DDNs <- to_glasso_DDN_tbl(glasso_DDN_list)
 
     DDNs %>%
       filter(pathway %in% pathway_list) -> DDNs
 
-    if (!is.null(mapping_samples_to_condition)) {
-      DDNs %>%
-        mutate(condition = mapping_samples_to_condition[condition]) -> DDNs
-    }
-
-
-    mediator_tbl <-
-      DDNs %>%
-      compute_DDN_mediators_by_pathway()
-
-    mediator_tbl %>%
-      flatten_DDN_mediators() %>%
-      left_join(summary_tbl, ., by = "pathway") -> summary_tbl
-
-    eddy_post_proc_list <- list(
-      summary = summary_tbl,
-      glasso_DDN_list = glasso_DDN_list,
-      DDNs = DDNs
+    post_proc_EDDY_DDNs(
+      DDNs = DDNs,
+      summary_tbl = summary_tbl,
+      create_ddn_graph = create_ddn_graph,
+      mapping_conditions = mapping_conditions,
+      db_name_prefix = db_name_prefix
     )
-
-    if (!is.null(db_name_prefix)) {
-      eddy_post_proc_list[["summary"]] %>%
-        dplyr::mutate(pathway_orig = pathway) %>%
-        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) %>%
-        dplyr::relocate(pathway, .before = n_actual) %>%
-        dplyr::relocate(pathway_orig, .after = last_col()) ->
-        eddy_post_proc_list[["summary"]]
-
-      eddy_post_proc_list[["DDNs"]] %>%
-        dplyr::mutate(pathway_orig = pathway) %>%
-        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) ->
-        eddy_post_proc_list[["DDNs"]]
-    }
-
-    if (create_ddn_graph) {
-      eddy_post_proc_list[["list_DDN_graph"]] <-
-        split(eddy_post_proc_list[["DDNs"]],
-              eddy_post_proc_list[["DDNs"]]$pathway) %>%
-        lapply(
-          FUN = function(ddn) {
-            plot_DDN_tbl_graph(
-              ddn,
-              show_mediators = "both",
-              show_node_label = FALSE,
-              show_pathway_group = FALSE
-            ) +
-              ggtitle(ddn$pathway[1])
-          }
-        )
-
-
-      eddy_post_proc_list[["DDN_graph_aggregated"]] <-
-        plot_DDN_tbl_graph(
-          eddy_post_proc_list[["DDNs"]],
-          show_mediators = "both",
-          show_node_label = FALSE,
-          show_pathway_group = TRUE
-        )
-
-      # DDNs, prob.adj < 0.05
-      eddy_post_proc_list[["summary"]] %>%
-        filter(prob.adj < p_val_threshold_strict) %>%
-        select(pathway) %>%
-        unlist() %>% unname() ->
-        pathway_list
-
-      eddy_post_proc_list[["DDNs"]] %>%
-        filter(pathway %in% pathway_list) %>%
-        plot_DDN_tbl_graph(
-          show_mediators = "both",
-          show_node_label = FALSE,
-          show_pathway_group = TRUE
-        ) ->
-        eddy_post_proc_list[["DDN_graph_aggregated_p0_05"]]
-
-    }
-    eddy_post_proc_list
   }
 
 
-#' Write EDDY post-processed results and DDNs into PDF
+#' Write EDDY post-processed results into tables
 #'
 #' @param eddy_postproc ...
-#' @param out_dir ...
-#' @param fig.width ...
-#' @param fig.height ...
+#' @param output_dir ...
 #' @return ...s
-write_eddy_postproc_pdf <- function(eddy_postproc, output_dir = ".", fig.width = 12, fig.height = 9) {
-  # create out_dir.  If it already exists, show warnings.
+write_eddy_postproc_csv <- function(eddy_postproc, output_dir = ".") {
+  # create output_dir.  If it already exists, show warnings.
   # shall we remove all the files if the folder exists before moving forward?
   dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
 
-
   if ("DDNs" %in% names(eddy_postproc)) {
-    readr::write_csv(eddy_postproc$DDNs, file = file.path(out_dir, "DDNs.csv"))
+    readr::write_csv(eddy_postproc$DDNs, file = file.path(output_dir, "DDNs.csv"))
   }
 
   if ("summary" %in% names(eddy_postproc)) {
     eddy_postproc$summary %>%
       select(-ends_with(".l")) %>%
-      readr::write_csv(file = file.path(out_dir, "summary.csv"))
+      readr::write_csv(file = file.path(output_dir, "summary.csv"))
   }
+}
+
+
+#' Write EDDY DDNs into PDF
+#'
+#' @param eddy_postproc ...
+#' @param output_dir ...
+#' @param fig.width ...
+#' @param fig.height ...
+#' @return ...s
+write_eddy_postproc_DDN_to_pdf <- function(eddy_postproc, output_dir = ".", fig.width = 12, fig.height = 9) {
+  # create output_dir.  If it already exists, show warnings.
+  # shall we remove all the files if the folder exists before moving forward?
+  dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
 
   if ("list_DDN_graph" %in% names(eddy_postproc)) {
     for (nn in names(eddy_postproc$list_DDN_graph)) {
@@ -256,20 +236,20 @@ write_eddy_postproc_pdf <- function(eddy_postproc, output_dir = ".", fig.width =
       ddn_file_name <- sprintf("DDN_%s.pdf", nn)
       ddn_file_name <- gsub("/+", "_", ddn_file_name)
 
-      ggsave(filename = file.path(out_dir, ddn_file_name),
+      ggsave(filename = file.path(output_dir, ddn_file_name),
              plot = eddy_postproc$list_DDN_graph[[nn]],
              width = fig.width, height = fig.height)
     }
   }
 
   if ("DDN_graph_aggregated_p0_05" %in% names(eddy_postproc)) {
-    ggsave(filename = file.path(out_dir, "aggregated_DDNs_p0_05.pdf"),
+    ggsave(filename = file.path(output_dir, "aggregated_DDNs_p0_05.pdf"),
            plot = eddy_postproc$DDN_graph_aggregated_p0_05,
            width = 2*fig.width, height = 2*fig.height)
   }
 
   if ("DDN_graph_aggregated" %in% names(eddy_postproc)) {
-    ggsave(filename = file.path(out_dir, "aggregated_DDNs.pdf"),
+    ggsave(filename = file.path(output_dir, "aggregated_DDNs.pdf"),
            plot = eddy_postproc$DDN_graph_aggregated,
            width = 2*fig.width, height = 2*fig.height)
   }
@@ -281,8 +261,8 @@ write_eddy_postproc_pdf <- function(eddy_postproc, output_dir = ".", fig.width =
 #' @param eddy_postproc list: ...
 #' @param json_dir string: ...
 #' @return ...s
-write_eddy_postproc_json <- function(eddy_postproc, json_dir = ".") {
-  # create out_dir.  If it already exists, show warnings.
+write_eddy_postproc_DDN_to_json <- function(eddy_postproc, json_dir = ".") {
+  # create json_dir.  If it already exists, show warnings.
   # shall we remove all the files if the folder exists before moving forward?
   dir.create(json_dir, showWarnings = TRUE, recursive = TRUE)
 
@@ -300,10 +280,10 @@ write_eddy_postproc_json <- function(eddy_postproc, json_dir = ".") {
   }
 
   #
-  p_val_max <- max(eddy_postproc$summary$P)
+  p_val_max <- max(eddy_postproc$summary$prob, na.rm = TRUE)
 
   eddy_postproc$summary %>%
-    filter(P< 0.05) %>%
+    filter(prob < 0.05) %>%
     select(pathway) %>%
     unlist %>% unname ->
     pathway_list
@@ -314,7 +294,7 @@ write_eddy_postproc_json <- function(eddy_postproc, json_dir = ".") {
 
   aggregated_markdown <-
     paste(
-      "# C1 vs C2\n",
+      sprintf("# %s", paste(eddy_postproc$conditions, collapse = " vs ")),
       "### Aggregated DDNs (could be slow)\n",
       "<a href=\"ddngraph.html?DDN=aggregated_p0_05\" target=\"_blank\">DDNs (P.val < 0.05)</a>",
       sep = "\n")
@@ -343,8 +323,9 @@ write_eddy_postproc_json <- function(eddy_postproc, json_dir = ".") {
 }
 
 #' @rdname write_eddy_postproc_json
-write_eddy_glasso_postproc_json <- function(eddy_postproc, json_dir = ".") {
-  # create out_dir.  If it already exists, show warnings.
+#' Deprecated
+obsolete_write_eddy_glasso_postproc_DDN_to_json <- function(eddy_postproc, json_dir = ".") {
+  # create json_dir.  If it already exists, show warnings.
   # shall we remove all the files if the folder exists before moving forward?
   dir.create(json_dir, showWarnings = TRUE, recursive = TRUE)
 
@@ -411,18 +392,28 @@ write_eddy_glasso_postproc_json <- function(eddy_postproc, json_dir = ".") {
 #' @param output_dir string: ...
 #' @return ...s
 write_eddy_summary_table_markdown <- function(eddy_postproc, output_dir) {
-  # create out_dir.  If it already exists, show warnings.
+  # create json_dir.  If it already exists, show warnings.
   # shall we remove all the files if the folder exists before moving forward?
   dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
 
   eddy_postproc$summary %>%
-    select(pathway, n_actual, known_dependency, rewiring, JS, P, essentiality_mediators_html.l, specificity_mediators_html.l) %>%
-    rename(n = n_actual,
-           P.value = P,
-           'known dependency (%)' = known_dependency,
-           'rewiring (%)' = rewiring,
-           'essentiality mediators' = essentiality_mediators_html.l,
-           'specificity mediators' = specificity_mediators_html.l) %>%
+    select(
+      pathway,
+      n_nodes,
+      known_dependency,
+      rewiring,
+      prob,
+      essentiality_mediators_html.l,
+      specificity_mediators_html.l
+    ) %>%
+    dplyr::rename(
+      n = n_nodes,
+      P.value = prob,
+      'known dependency (%)' = known_dependency,
+      'rewiring (%)' = rewiring,
+      'essentiality mediators' = essentiality_mediators_html.l,
+      'specificity mediators' = specificity_mediators_html.l
+    ) %>%
     mutate(DDN = add_DDN_link(pathway, style = "html")) %>%
     mutate(pathway = add_MSigDB_link(pathway, style = "html")) %>%
     arrange(P.value) %>%
@@ -444,8 +435,9 @@ write_eddy_summary_table_markdown <- function(eddy_postproc, output_dir) {
 #' Write summary table in markdown format
 #'
 #' @rdname write_eddy_summary_table_markdown
-write_eddy_glasso_summary_table_markdown <- function(eddy_postproc, output_dir) {
-  # create out_dir.  If it already exists, show warnings.
+#' Deprecated
+obsolete_write_eddy_glasso_summary_table_markdown <- function(eddy_postproc, output_dir) {
+  # create json_dir.  If it already exists, show warnings.
   # shall we remove all the files if the folder exists before moving forward?
   dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
 

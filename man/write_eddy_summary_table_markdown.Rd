@@ -2,12 +2,9 @@
 % Please edit documentation in R/eddy-post-proc.R
 \name{write_eddy_summary_table_markdown}
 \alias{write_eddy_summary_table_markdown}
-\alias{write_eddy_glasso_summary_table_markdown}
 \title{Write summary table in markdown format}
 \usage{
 write_eddy_summary_table_markdown(eddy_postproc, output_dir)
-
-write_eddy_glasso_summary_table_markdown(eddy_postproc, output_dir)
 }
 \arguments{
 \item{eddy_postproc}{list: ...}
@@ -18,7 +15,5 @@ write_eddy_glasso_summary_table_markdown(eddy_postproc, output_dir)
 ...s
 }
 \description{
-Write summary table in markdown format
-
 Write summary table in markdown format
 }

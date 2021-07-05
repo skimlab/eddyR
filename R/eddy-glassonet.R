@@ -12,11 +12,17 @@ calc_glasso_DDN_score <- function(glasso_ddn) {
 #' @return list of prob, rewiring, and other parameters computed from ddn_tbl
 calc_DDN_score <- function(ddn_tbl) {
   if (is.null(ddn_tbl)) {
-    return(list(
-      prob = NA,
-      rewiring = NA,
-      n1_edge = 0, n2_edge = 0, nc_edge = 0, n_edge = 0
-    ))
+    return(
+      list(
+        prob = NA,
+        rewiring = NA,
+        n_nodes = 0,
+        n_edges_C1 = 0,
+        n_edges_C2 = 0,
+        n_edges_common = 0,
+        n_edges = 0
+      )
+    )
   }
 
   ddn_tbl_c <-
@@ -30,10 +36,14 @@ calc_DDN_score <- function(ddn_tbl) {
   conditions <- unique(ddn_tbl_c$condition)
 
   # number of edges in G1 and G2
-  n1_edge <- ddn_tbl %>% filter(condition == conditions[1] | tolower(condition) == "common") %>% nrow()
-  n2_edge <- ddn_tbl %>% filter(condition == conditions[2] | tolower(condition) == "common") %>% nrow()
-  q_edge <- nrow(ddn_tbl_s)
-  n_edge <- n1_edge + n2_edge - q_edge
+  n_edges_C1 <-
+    ddn_tbl %>% filter(condition == conditions[1] |
+                         tolower(condition) == "common") %>% nrow()
+  n_edges_C2 <-
+    ddn_tbl %>% filter(condition == conditions[2] |
+                         tolower(condition) == "common") %>% nrow()
+  n_edges_common <- nrow(ddn_tbl_s)
+  n_edges <- n_edges_C1 + n_edges_C2 - n_edges_common
 
 
   # n1 <- sum(abs(sign(p1_x)))/2
@@ -42,12 +52,22 @@ calc_DDN_score <- function(ddn_tbl) {
   # k <- length(a_set)
   # n <- k*(k-1)/2
 
-  n_actual = length(union(ddn_tbl$node_src, ddn_tbl$node_dst))
+  n_nodes = length(union(ddn_tbl$node_src, ddn_tbl$node_dst))
 
-  list(prob = phyper(q = q_edge, m = n1_edge, n = n2_edge, k = n2_edge),
-       rewiring = 1 - q_edge/n_edge,
-       n_actual = n_actual,
-       n1_edge = n1_edge, n2_edge = n2_edge, nc_edge = q_edge, n_edge = n_edge)
+  list(
+    prob = phyper(
+      q = n_edges_common,
+      m = n_edges_C1,
+      n = n_edges_C2,
+      k = n_edges_C2
+    ),
+    rewiring = 1 - n_edges_common / n_edges,
+    n_nodes = n_nodes,
+    n_edges_c1 = n_edges_C1,
+    n_edges_C2 = n_edges_C2,
+    n_edges_common = n_edges_common,
+    n_edges = n_edges
+  )
 }
 
 #' Train GLASSO over cross-validation
@@ -468,26 +488,30 @@ to_glasso_DDN_summary <- function(glasso_DDN_list, selected_names = NULL) {
     lapply(glasso_DDN_list,
            function(ddn) {
              calc_glasso_DDN_score(ddn)
-           }) %>% bind_rows(.id = "pathway") %>%
-      select(-n_edge)
+           }) %>% bind_rows(.id = "pathway")
 
   if (!('known_dependency' %in% colnames(DDN_summary))) {
     DDN_summary[["known_dependency"]] <- 0     # all statistical dependencies
   }
 
   DDN_summary %>%
-    mutate(prob.adj = p.adjust(prob)) %>%
-    relocate(prob.adj, .after = prob) %>%
-    arrange(prob.adj,-rewiring)
+    dplyr::rename(prob.raw = prob) %>%
+    mutate(prob.adj = p.adjust(prob.raw)) %>%
+    mutate(prob = prob.adj) %>%    # set prob to prob.adj for glassnoet
+    arrange(prob, -rewiring)
 }
 
 #' Combine all DDNs into a single table
 #'
 #' @param glasso_DDN_list list of glass DDNs
 #' @return data frame, DDN table
-aggregate_DDN_table <- function(glasso_DDN_list) {
+to_glasso_DDN_tbl <- function(glasso_DDN_list) {
   # remove empty DDNs
-  to_keep <-  glasso_DDN_list %>% lapply(function(ddn) { !is.null(ddn$ddn_tbl) && nrow(ddn$ddn_tbl) > 0 }) %>% unlist()
+  to_keep <-
+    glasso_DDN_list %>% lapply(function(ddn) {
+      !is.null(ddn$ddn_tbl) && nrow(ddn$ddn_tbl) > 0
+    }) %>% unlist()
+
   lapply(glasso_DDN_list[which(to_keep)],
          `[[`, "ddn_tbl") %>%
     bind_rows(.id = "pathway")
