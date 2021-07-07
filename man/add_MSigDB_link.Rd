@@ -4,7 +4,7 @@
 \alias{add_MSigDB_link}
 \title{Create MSigDB link}
 \usage{
-add_MSigDB_link(pathway, style = c("markdown", "html"))
+add_MSigDB_link(pathway, pathway_orig, style = c("markdown", "html"))
 }
 \description{
 Create MSigDB link

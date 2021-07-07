@@ -44,23 +44,35 @@ post_proc_EDDY_DDNs <-
 
     eddy_post_proc_list <- list(
       summary = summary_tbl,
+      DDNs = DDNs,
       conditions = conditions,
-      DDNs = DDNs
+      mapping_conditions = mapping_conditions,
+      db_name_prefix = db_name_prefix
     )
+
+    # pathway name tidy up
+    eddy_post_proc_list[["summary"]] %>%
+      dplyr::mutate(pathway_orig = pathway) ->
+      eddy_post_proc_list[["summary"]]
+
+    eddy_post_proc_list[["DDNs"]] %>%
+      dplyr::mutate(pathway_orig = pathway) ->
+      eddy_post_proc_list[["DDNs"]]
 
     if (!isTRUE(is.na(db_name_prefix))) {
       eddy_post_proc_list[["summary"]] %>%
-        dplyr::mutate(pathway_orig = pathway) %>%
-        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) %>%
-        dplyr::relocate(pathway, .before = n_nodes) %>%
-        dplyr::relocate(pathway_orig, .after = last_col()) ->
+        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) ->
         eddy_post_proc_list[["summary"]]
 
       eddy_post_proc_list[["DDNs"]] %>%
-        dplyr::mutate(pathway_orig = pathway) %>%
         dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) ->
         eddy_post_proc_list[["DDNs"]]
     }
+
+    eddy_post_proc_list[["summary"]] %>%
+      dplyr::relocate(pathway, .before = n_nodes) %>%
+      dplyr::relocate(pathway_orig, .after = last_col()) ->
+      eddy_post_proc_list[["summary"]]
 
     if (create_ddn_graph) {
       eddy_post_proc_list[["list_DDN_graph"]] <-
@@ -201,7 +213,7 @@ post_proc_EDDY_glasso <-
 #' @param eddy_postproc ...
 #' @param output_dir ...
 #' @return ...s
-write_eddy_postproc_csv <- function(eddy_postproc, output_dir = ".") {
+write_eddy_postproc_to_csv <- function(eddy_postproc, output_dir = ".") {
   # create output_dir.  If it already exists, show warnings.
   # shall we remove all the files if the folder exists before moving forward?
   dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
@@ -271,7 +283,7 @@ write_eddy_postproc_DDN_to_json <- function(eddy_postproc, json_dir = ".") {
 
   for (a_pathway in pathway_list) {
     # some pathway names has "/" and need to be fixed.
-    json_file_name <- sprintf("DDN_%s.json", a_pathway)
+    json_file_name <- sprintf("%s.json", a_pathway)
     json_file_name <- gsub("/+", "_", json_file_name)
 
     eddy_postproc$DDNs %>%
@@ -397,6 +409,9 @@ write_eddy_summary_table_markdown <- function(eddy_postproc, output_dir) {
   dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
 
   eddy_postproc$summary %>%
+    mutate(DDN = add_DDN_link(pathway, style = "html")) %>%
+    mutate(pathway = add_MSigDB_link(pathway = pathway, pathway_orig = pathway_orig, style = "html")) %>%
+    mutate(known_dependency = known_dependency*100, rewiring = rewiring*100) %>%
     select(
       pathway,
       n_nodes,
@@ -404,18 +419,17 @@ write_eddy_summary_table_markdown <- function(eddy_postproc, output_dir) {
       rewiring,
       prob,
       essentiality_mediators_html.l,
-      specificity_mediators_html.l
+      specificity_mediators_html.l,
+      DDN
     ) %>%
     dplyr::rename(
       n = n_nodes,
       P.value = prob,
-      'known dependency (%)' = known_dependency,
+      'known edges (%)' = known_dependency,
       'rewiring (%)' = rewiring,
       'essentiality mediators' = essentiality_mediators_html.l,
       'specificity mediators' = specificity_mediators_html.l
     ) %>%
-    mutate(DDN = add_DDN_link(pathway, style = "html")) %>%
-    mutate(pathway = add_MSigDB_link(pathway, style = "html")) %>%
     arrange(P.value) %>%
     knitr::kable(format = "markdown") %>%
     gsub("[' ']+,", ",", .) ->      # to get rid of extra spaces between words
@@ -490,13 +504,13 @@ add_DDN_link <- function(pathway, style = c("markdown", "html")) {
 }
 
 #' Create MSigDB link
-add_MSigDB_link <- function(pathway, style = c("markdown", "html")) {
+add_MSigDB_link <- function(pathway, pathway_orig, style = c("markdown", "html")) {
   style <- style[1]
 
   if (style == "markdown") {
-    sprintf('[%s](https://www.gsea-msigdb.org/gsea/msigdb/cards/%s.html)', reactome_cleanup(pathway), pathway)
+    sprintf('[%s](https://www.gsea-msigdb.org/gsea/msigdb/cards/%s.html)', pathway, pathway_orig)
   } else {
-    sprintf('<a href="https://www.gsea-msigdb.org/gsea/msigdb/cards/%s.html" target="_blank">%s</a>', pathway, reactome_cleanup(pathway))
+    sprintf('<a href="https://www.gsea-msigdb.org/gsea/msigdb/cards/%s.html" target="_blank">%s</a>', pathway_orig, pathway)
   }
 }
 
