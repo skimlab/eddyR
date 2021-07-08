@@ -51,35 +51,39 @@ read_summary_table <- function(path, tag = NA) {
 #' @param run.dir a path to 'results.txt'
 #' @return \code{tibble} table
 read_results_txt <- function(run.dir) {
-  # read old, ill-formatted 'results.txt'
-  x <- readLines(file.path(run.dir, "results.txt"))
 
-  # filter out 'failed' lines
-  y <- x[!grepl("failed with", x)]
+  # first attempt if it's in a "new" format
+  y <- read_tsv(file.path(run.dir, "results.txt"))
+  if (colnames(y)[1] != "Pathway") {
+    # read old, ill-formatted 'results.txt'
+    x <- readLines(file.path(run.dir, "results.txt"))
 
-  # reformat the lines
-  y <- gsub("\\s+", "\t", y)
+    # filter out 'failed' lines
+    y <- x[!grepl("failed with", x)]
 
-  # and add a missing column headning at the end, 'n'
-  y[1] <- paste(y[1], "n", sep = "")
+    # reformat the lines
+    y <- gsub("\\s+", "\t", y)
 
-  # replace the first column heading with Pathway
-  y[1] <- sub("^.+JS", "Pathway\tJS", y[1])
+    # and add a missing column heading at the end, 'n'
+    y[1] <- paste(y[1], "n", sep = "")
 
-  # this works with MSigDB originated pathways
-  # db.name <- unlist(strsplit(y[2], split = "_"))[1]
+    # replace the first column heading with Pathway
+    y[1] <- sub("^.+JS", "Pathway\tJS", y[1])
 
-  # writing them back into TSV formatted file
-  writeLines(y, con = file.path(run.dir, "results.tsv"))
+    # this works with MSigDB originated pathways
+    # db.name <- unlist(strsplit(y[2], split = "_"))[1]
+
+    # writing them back into TSV formatted file
+    writeLines(y, con = file.path(run.dir, "results.tsv"))
+  } else {
+    colnames(y) <- c("Pathway", "JS", "P", "n")
+
+    # writing them back into TSV formatted file
+    write_tsv(y, file = file.path(run.dir, "results.tsv"))
+  }
 
   # now read it back
   readr::read_tsv(file.path(run.dir, "results.tsv"), col_types = readr::cols())
-  # bind_cols(
-  #   DB = db.name,
-  #   read_tsv(file.path(run.dir, "results.tsv"), col_types = cols())
-  # ) %>% relocate(
-  #   DB, .after = Pathway
-  # )
 }
 
 
