@@ -14,7 +14,7 @@ plot_DDN_tbl_graph(
 \arguments{
 \item{ddn_tbl}{see \code{\link{as_DDN_graph}}}
 
-\item{show_mediators}{If show_mediators is one of 'none' (no mediator), 'specificitiy', 'essentiality' and 'both',
+\item{show_mediators}{If show_mediators is one of 'none' (no mediator), 'specificity', 'essentiality' and 'both',
 mediators will be computed and added to DDN graph and shown.  One can also provide a list of mediators.}
 
 \item{show_pathway_group}{If TRUE, pathway names will be printed around the genes belonging to the same pathway.}

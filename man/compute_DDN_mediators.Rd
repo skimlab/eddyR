@@ -4,7 +4,12 @@
 \alias{compute_DDN_mediators}
 \title{Compute mediators for DDN}
 \usage{
-compute_DDN_mediators(ddn, mediator.type = "both")
+compute_DDN_mediators(
+  ddn,
+  mediator.type = "both",
+  essentiality_cutoff = 0.05,
+  specificity_cutoff = 0.05
+)
 }
 \description{
 Compute mediators for DDN

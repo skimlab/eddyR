@@ -9,6 +9,9 @@
 post_proc_EDDY_DDNs(
   DDNs,
   summary_tbl,
+  mediator.type = "both",
+  essentiality_cutoff = 0.05,
+  specificity_cutoff = 0.05,
   create_ddn_graph = FALSE,
   mapping_conditions = NA,
   db_name_prefix = NA
@@ -16,6 +19,9 @@ post_proc_EDDY_DDNs(
 
 post_proc_EDDY_folder(
   eddy_run_dir,
+  mediator.type = "both",
+  essentiality_cutoff = 0.05,
+  specificity_cutoff = 0.05,
   create_ddn_graph = FALSE,
   mapping_conditions = NA,
   db_name_prefix = NA
@@ -23,6 +29,9 @@ post_proc_EDDY_folder(
 
 post_proc_EDDY_glasso(
   glasso_DDN_list,
+  mediator.type = "both",
+  essentiality_cutoff = 0.05,
+  specificity_cutoff = 0.05,
   create_ddn_graph = FALSE,
   mapping_conditions = NA,
   db_name_prefix = NA
@@ -32,6 +41,12 @@ post_proc_EDDY_glasso(
 \item{DDNs}{data.frame (DDN table)}
 
 \item{summary_tbl}{data.frame}
+
+\item{mediator.type}{string: one of "both" (default), "essentiality" and "specificity"}
+
+\item{essentiality_cutoff}{double: top percentile (default: 0.05)}
+
+\item{specificity_cutoff}{double: p-value (default: 0.05)}
 
 \item{create_ddn_graph}{logical (default is FALSE)}
 

@@ -106,7 +106,7 @@ compute_node_mediator_specificity_phyper <- function(node_edges, Ec, Es) {
 
 
 #' Compute specificity mediators for DDN
-compute_DDN_mediator_specificity <- function(ddn, p_val.cutoff = 0.05) {
+compute_DDN_mediator_specificity <- function(ddn, p_val.cutoff = 0.05, use_adjusted_p_value = FALSE) {
   nodes <- union(ddn$node_src, ddn$node_dst)
 
   Ec <- nrow(filter(ddn, tolower(condition) != "common")) # no. of condition specific edges
@@ -129,7 +129,10 @@ compute_DDN_mediator_specificity <- function(ddn, p_val.cutoff = 0.05) {
              mediator_specificity_pbinom_val = pbinom_vals,
              mediator_specificity_phyper_val.fdr = p.adjust(phyper_vals, method = "fdr"),
              mediator_specificity_pbinom_val.fdr = p.adjust(pbinom_vals, method = "fdr")) %>%
-    mutate(mediator_specificity = mediator_specificity_pbinom_val.fdr < p_val.cutoff)
+    mutate(mediator_specificity_p_val = ifelse(use_adjusted_p_value,   # phyper preferred over pbinom
+                                               mediator_specificity_phyper_val.fdr,
+                                               mediator_specificity_phyper_val)) %>%
+    mutate(mediator_specificity = mediator_specificity_p_val < p_val.cutoff)
 }
 
 
@@ -165,20 +168,26 @@ compute_DDN_mediator_essentiality <- function(ddn, percentile_cutoff = 0.05) {
     mutate(abs_diff = abs(diff)) ->
     nodes_mediator_essentiality
 
-  cutoff.n <- quantile(nodes_mediator_essentiality[["diff"]], percentile_cutoff/2)
-  cutoff.p <- quantile(nodes_mediator_essentiality[["diff"]], 1-percentile_cutoff/2)
+  # cutoff.n <- quantile(nodes_mediator_essentiality[["diff"]], percentile_cutoff/2)
+  # cutoff.p <- quantile(nodes_mediator_essentiality[["diff"]], 1-percentile_cutoff/2)
 
+  # nodes_mediator_essentiality %>%
+  #   mutate(mediator_essentiality = diff < cutoff.n | diff > cutoff.p)
+
+  cutoff <- quantile(nodes_mediator_essentiality[["abs_diff"]], 1 - percentile_cutoff)
   nodes_mediator_essentiality %>%
-    mutate(mediator_essentiality = diff < cutoff.n | diff > cutoff.p)
+    mutate(mediator_essentiality = abs_diff > cutoff)
 }
 
 
 
 
 #' Compute mediators for DDN
-compute_DDN_mediators <- function(ddn, mediator.type = "both") {
-  ddn_specificty <- compute_DDN_mediator_specificity(ddn)
-  ddn_essentiality <- compute_DDN_mediator_essentiality(ddn)
+compute_DDN_mediators <- function(ddn, mediator.type = "both",
+                                  essentiality_cutoff = 0.05,
+                                  specificity_cutoff = 0.05) {
+  ddn_specificty <- compute_DDN_mediator_specificity(ddn, p_val.cutoff = specificity_cutoff)
+  ddn_essentiality <- compute_DDN_mediator_essentiality(ddn, percentile_cutoff = essentiality_cutoff)
 
   # specificity mediator labels, as factors
   spec_mediators <- c("none", "specificity")
@@ -234,7 +243,7 @@ compute_DDN_mediators_by_pathway <- function(ddn, ...) {
 #' Plot DDN graph from DDN table
 #'
 #' @param ddn_tbl see \code{\link{as_DDN_graph}}
-#' @param show_mediators If show_mediators is one of 'none' (no mediator), 'specificitiy', 'essentiality' and 'both',
+#' @param show_mediators If show_mediators is one of 'none' (no mediator), 'specificity', 'essentiality' and 'both',
 #'   mediators will be computed and added to DDN graph and shown.  One can also provide a list of mediators.
 #' @param show_pathway_group If TRUE, pathway names will be printed around the genes belonging to the same pathway.
 #' @param ... Additional parameters passed to \code{\link{plot_DDN_graph}}

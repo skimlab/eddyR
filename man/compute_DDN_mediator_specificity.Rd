@@ -4,7 +4,11 @@
 \alias{compute_DDN_mediator_specificity}
 \title{Compute specificity mediators for DDN}
 \usage{
-compute_DDN_mediator_specificity(ddn, p_val.cutoff = 0.05)
+compute_DDN_mediator_specificity(
+  ddn,
+  p_val.cutoff = 0.05,
+  use_adjusted_p_value = FALSE
+)
 }
 \description{
 Compute specificity mediators for DDN

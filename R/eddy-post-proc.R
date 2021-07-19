@@ -6,6 +6,9 @@
 #' @param eddy_run_dir string (path)
 #' @param glasso_DDN_list list of glasso DDNs
 #' @param summary_tbl data.frame
+#' @param mediator.type string: one of "both" (default), "essentiality" and "specificity"
+#' @param essentiality_cutoff double: top percentile (default: 0.05)
+#' @param specificity_cutoff double: p-value (default: 0.05)
 #' @param DDNs data.frame (DDN table)
 #' @param create_ddn_graph logical (default is FALSE)
 #' @param mapping_samples_to_condition named vector
@@ -17,6 +20,9 @@
 post_proc_EDDY_DDNs <-
   function(DDNs,
            summary_tbl,
+           mediator.type = "both",
+           essentiality_cutoff = 0.05,
+           specificity_cutoff = 0.05,
            create_ddn_graph = FALSE,
            mapping_conditions = NA,
            db_name_prefix = NA) {
@@ -35,7 +41,10 @@ post_proc_EDDY_DDNs <-
     # DDNs (table done)
 
     mediator_tbl <-
-      compute_DDN_mediators_by_pathway(DDNs)
+      compute_DDN_mediators_by_pathway(DDNs,
+                                       mediator.type = mediator.type,
+                                       essentiality_cutoff = essentiality_cutoff,
+                                       specificity_cutoff = specificity_cutoff)
 
     mediator_tbl %>%
       flatten_DDN_mediators() %>%
@@ -126,6 +135,9 @@ post_proc_EDDY_DDNs <-
 #' @rdname post_proc_EDDY_DDNs
 post_proc_EDDY_folder <-
   function(eddy_run_dir,
+           mediator.type = "both",
+           essentiality_cutoff = 0.05,
+           specificity_cutoff = 0.05,
            create_ddn_graph = FALSE,
            mapping_conditions = NA,
            db_name_prefix = NA) {
@@ -163,6 +175,9 @@ post_proc_EDDY_folder <-
     post_proc_EDDY_DDNs(
       DDNs = DDNs,
       summary_tbl = summary_tbl,
+      mediator.type = mediator.type,
+      essentiality_cutoff = essentiality_cutoff,
+      specificity_cutoff = specificity_cutoff,
       create_ddn_graph = create_ddn_graph,
       mapping_conditions = mapping_conditions,
       db_name_prefix = db_name_prefix
@@ -174,6 +189,9 @@ post_proc_EDDY_folder <-
 #' @rdname post_proc_EDDY_DDNs
 post_proc_EDDY_glasso <-
   function(glasso_DDN_list,
+           mediator.type = "both",
+           essentiality_cutoff = 0.05,
+           specificity_cutoff = 0.05,
            create_ddn_graph = FALSE,
            mapping_conditions = NA,
            db_name_prefix = NA) {
@@ -201,6 +219,9 @@ post_proc_EDDY_glasso <-
     post_proc_EDDY_DDNs(
       DDNs = DDNs,
       summary_tbl = summary_tbl,
+      mediator.type = mediator.type,
+      essentiality_cutoff = essentiality_cutoff,
+      specificity_cutoff = specificity_cutoff,
       create_ddn_graph = create_ddn_graph,
       mapping_conditions = mapping_conditions,
       db_name_prefix = db_name_prefix
@@ -321,6 +342,14 @@ write_eddy_postproc_DDN_to_json <- function(eddy_postproc, json_dir = ".") {
         "| <a href=\"ddngraph.html?DDN=aggregated\" target=\"_blank\">DDNs (Full)</a>\n",
         sep = "\n")
   }
+
+  # to be safe, separating
+  aggregated_markdown <-
+    paste(
+      aggregated_markdown,
+      "\n",
+      sep = "\n")
+
 
   eddy_postproc[["summary"]] %>%
     mutate(specificity_mediators_html.l = add_GeneCard_link(specificity_mediators.l, style = "html"),
