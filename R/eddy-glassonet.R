@@ -79,6 +79,7 @@ calc_DDN_score <- function(ddn_tbl) {
 #' @param rholist list of rho values.  If NULL, they will be automatically created.
 #' @param thr threshold for convergence in \code{\link{glasso}}
 #' @param maxit passed to \code{\link{glasso}}
+#' @param crit.cv cross validation criterion (\code{BIC}, \code{AIC}, or \code{loglik}). Defaults to \code{BIC}.
 #' @param approx passed to \code{\link{glasso}}
 #' @param penalized_diagonal passed to \code{\link{glasso}}
 #' @param rho_min_ratio used to set minimum rho value
@@ -89,9 +90,10 @@ cv_glasso <-
            name = "cv_glasso",
            K = 5,
            iter_cv = 10,
-           rholist = NULL,
+           rholist = NA,
            thr = 1.0e-4,
            maxit = 1e4,
+           crit.cv = c("BIC", "AIC", "loglik"),
            approx = FALSE,
            penalize_diagonal = TRUE,
            rho_min_ratio = 0.01,
@@ -99,6 +101,8 @@ cv_glasso <-
            progress_bar = TRUE,
            cores = 1) {
 
+
+    crit.cv <- match.arg(crit.cv)
 
     # start time
     s_t <- Sys.time()
@@ -116,12 +120,14 @@ cv_glasso <-
       )
     }
 
-
+    # n.obs
     n <- nrow(X)
 
+    # variance
     s <- var(X)
+
     # set up rholist so that it will be consistent for all CV iteration
-    if (is.null(rholist)) {
+    if (is.na(rholist)) {
       # calculate lam.max and lam.min
       nrho = 10
       rho_max = max(abs(s))
@@ -183,6 +189,7 @@ cv_glasso <-
                       function(rho) {
                         glasso::glasso(
                           s = S_train,
+                          nobs = nrow(X_train),
                           rho = rho,
                           thr = thr,
                           maxit = maxit,
@@ -198,24 +205,38 @@ cv_glasso <-
       glp <- list(
         rholist = rholist,
         approx = approx,
+        loglik = lapply(glist, `[[`, "loglik"),
         wi = lapply(glist, `[[`, "wi"),
         w = lapply(glist, `[[`, "w"),
         del = lapply(glist, `[[`, "del"),
         niter = lapply(glist, `[[`, "niter")
       )
 
-      glp$errs <-
+      glp$loglik_test <-
         sapply(seq_along(glp$rholist),
                function(i) {
-                 # (nrow(X_train) / 2) * (sum(wi * S_test) - determinant(wi, logarithm = TRUE)$modulus[1])
+                 # (nrow(X) / 2) * (sum(wi * S_test) - determinant(wi, logarithm = TRUE)$modulus[1])
                  calc_loglik(
-                   n = nrow(X_train),
+                   n = nrow(X),
                    wi = glp$wi[[i]],
                    S = S_test,
                    rho = glp$rholist[i]
                  )
                })
 
+      glp$AIC_test <-
+        sapply(seq_along(glp$rholist),
+               function(i) {
+                 glp$loglik_test[i] + sum(glp$wi[[i]] != 0)
+               })
+
+      glp$BIC_test <-
+        sapply(seq_along(glp$rholist),
+               function(i) {
+                 glp$loglik_test[i] + sum(glp$wi[[i]] != 0) * log(nrow(X))/2
+               })
+
+      # return the result
       glp
     }
     #
@@ -281,11 +302,281 @@ cv_glasso <-
         w_init = w_init,
         wi_init = wi_init,
         log10rho = log10(glasso_trained[[1]]$rholist),
-        cv_errors = lapply(glasso_trained, `[[`, "errs") %>% bind_cols()
+        loglik_test = lapply(glasso_trained, `[[`, "loglik_test") %>% bind_cols(),
+        AIC_test = lapply(glasso_trained, `[[`, "AIC_test") %>% bind_cols(),
+        BIC_test = lapply(glasso_trained, `[[`, "BIC_test") %>% bind_cols()
       )
 
-    cv_gls[["avg_errors"]] <- rowMeans(cv_gls$cv_errors)
-    cv_gls[["sd_errors"]] <- apply(cv_gls$cv_errors, MARGIN = 1, sd)
+    cv_gls[["avg_loglik"]] <- rowMeans(cv_gls$loglik_test)
+    cv_gls[["sd_loglik"]] <- apply(cv_gls$loglik_test, MARGIN = 1, sd)
+
+    cv_gls[["avg_AIC"]] <- rowMeans(cv_gls$AIC_test)
+    cv_gls[["sd_AIC"]] <- apply(cv_gls$AIC_test, MARGIN = 1, sd)
+
+    cv_gls[["avg_BIC"]] <- rowMeans(cv_gls$BIC_test)
+    cv_gls[["sd_BIC"]] <- apply(cv_gls$BIC_test, MARGIN = 1, sd)
+
+    # find optimal rho and glasso
+    cv_gls <- find_optimal_glasso(cv_gls, crit.cv)
+
+    # end time
+    e_t <- Sys.time()
+
+    cv_gls$compute_time <-
+      list(start_time = s_t,
+           end_time = e_t,
+           duration_secs = as.integer(difftime(e_t, s_t, units = "sec")))
+
+    class(cv_gls) <- "cv_glasso"
+
+    return(cv_gls)
+  }
+
+cv_glasso_obsolete <-
+  function(X,
+           name = "cv_glasso",
+           K = 5,
+           iter_cv = 10,
+           rholist = NA,
+           thr = 1.0e-4,
+           maxit = 1e4,
+           crit.cv = c("BIC", "AIC", "loglik"),
+           approx = FALSE,
+           penalize_diagonal = TRUE,
+           rho_min_ratio = 0.01,
+           trace = 0,
+           progress_bar = TRUE,
+           cores = 1) {
+
+
+    crit.cv <- match.arg(crit.cv)
+
+    # start time
+    s_t <- Sys.time()
+
+    c1 <- ncol(X)
+    X <- prep_data_for_Kfolds(X, K)
+    if (c1 > ncol(X)) {
+      warning(
+        sprintf(
+          "%d (out of %d) features were removed to ensure %d-fold cross-validation work well...",
+          c1 - ncol(X),
+          c1,
+          K
+        )
+      )
+    }
+
+    # n.obs
+    n <- nrow(X)
+
+    # variance
+    s <- var(X)
+
+    # set up rholist so that it will be consistent for all CV iteration
+    if (is.na(rholist)) {
+      # calculate lam.max and lam.min
+      nrho = 10
+      rho_max = max(abs(s))
+      rho_min = rho_min_ratio * rho_max
+
+      # calculate grid of lambda values
+      rholist = 10 ^ seq(log10(rho_min), log10(rho_max), length = nrho)
+
+      # from glassopath itself, replaced by the above code taken from CV.glasso
+      # rholist <- seq(max(abs(s)) / 100, max(abs(s)), length = 10)
+    }
+    rholist <- sort(rholist)
+
+    train.size <- round(n * (K - 1) / K)
+
+    folds_idx_list <-
+      lapply(1:iter_cv, function(i, n, K) {
+        create_folds_idx(n, K)
+      }, n = n, K = K) %>%
+      unlist(recursive = FALSE)
+
+    train_idx_list <-
+      lapply(folds_idx_list,
+             function(a_fold) {
+               setdiff(1:n, a_fold)
+             })
+
+    # use all available cores
+    if (cores == 0) {
+      cores <- availableCores()
+    }
+
+    if (progress_bar)
+      pb <- progressr::progressor(along = seq_along(train_idx_list))
+
+    #
+    # internal function to train glasso over CV-fold
+    # BEGIN
+    #
+    cv_glasso_iter <- function(k) {
+      X_train <- X[train_idx_list[[k]], ]
+      X_test <- X[-train_idx_list[[k]], ]
+
+      S_train <- var(X_train)
+      S_test <- var(X_test)
+
+      if (!matrixcalc::is.positive.definite(S_train)) {
+        warning(
+          "Covariance matrix, S_train, is not positive-definite which could render 'glasso' hung...  So, S.train is amended to be positive-definite."
+        )
+        w_init = to_PD_matrix(S_train, diagonal = penalize_diagonal)
+        wi_init = diag(ncol(S_train))
+      } else {
+        w_init = S_train
+        wi_init = diag(ncol(S_train))
+      }
+
+      glist <- lapply(rholist,
+                      function(rho) {
+                        glasso::glasso(
+                          s = S_train,
+                          nobs = nrow(X_train),
+                          rho = rho,
+                          thr = thr,
+                          maxit = maxit,
+                          approx = approx,
+                          penalize.diagonal = penalize_diagonal,
+                          start = "warm",
+                          w.init = w_init,
+                          wi.init = wi_init,
+                          trace = trace
+                        )
+                      })
+
+      glp <- list(
+        rholist = rholist,
+        approx = approx,
+        loglik = lapply(glist, `[[`, "loglik"),
+        wi = lapply(glist, `[[`, "wi"),
+        w = lapply(glist, `[[`, "w"),
+        del = lapply(glist, `[[`, "del"),
+        niter = lapply(glist, `[[`, "niter")
+      )
+
+      glp$loglik_test <-
+        sapply(seq_along(glp$rholist),
+               function(i) {
+                 # (nrow(X) / 2) * (sum(wi * S_test) - determinant(wi, logarithm = TRUE)$modulus[1])
+                 calc_loglik(
+                   n = nrow(X),
+                   wi = glp$wi[[i]],
+                   S = S_test,
+                   rho = glp$rholist[i]
+                 )
+               })
+
+      glp$AIC_test <-
+        sapply(seq_along(glp$rholist),
+               function(i) {
+                 glp$loglik_test[i] + sum(glp$wi[[i]] != 0)
+               })
+
+      glp$BIC_test <-
+        sapply(seq_along(glp$rholist),
+               function(i) {
+                 glp$loglik_test[i] + sum(glp$wi[[i]] != 0) * log(nrow(X))/2
+               })
+
+      # return the result
+      glp
+    }
+    #
+    # internal function to train glasso over CV-fold
+    # END
+    #
+
+    if (cores > 1) {
+      max_cores <- availableCores()
+
+      if (max_cores < cores) {
+        message(
+          sprintf(
+            "The number of available cores (%d) is less than what is requested (%d)...",
+            max_cores,
+            cores
+          )
+        )
+        cores <- max_cores
+      }
+
+      plan(multisession, workers = cores)
+
+      glasso_trained <-
+        future_lapply(seq_along(train_idx_list),
+                      function(k) {
+                        if (progress_bar) {
+                          # report progress, before returning
+                          pb()
+                        }
+
+                        cv_glasso_iter(k)
+                      })
+    } else {
+      glasso_trained <-
+        lapply(seq_along(train_idx_list),
+               function(k) {
+                 if (progress_bar) {
+                   # report progress, before returning
+                   pb()
+                 }
+
+                 cv_glasso_iter(k)
+               })
+    }
+
+    names(glasso_trained) <- 1:length(train_idx_list)
+
+    w_init <- s
+    wi_init <- diag(ncol(s))
+
+    # summary of glasso trained over CV
+    cv_gls <-
+      list(
+        name = name,
+        X = X,
+        S = s,
+        rho = glasso_trained[[1]]$rholist,
+        thr = thr,
+        maxit = maxit,
+        approx = approx,
+        penalize.diagonal = penalize_diagonal,
+        w_init = w_init,
+        wi_init = wi_init,
+        log10rho = log10(glasso_trained[[1]]$rholist),
+        loglik_test = lapply(glasso_trained, `[[`, "loglik_test") %>% bind_cols(),
+        AIC_test = lapply(glasso_trained, `[[`, "AIC_test") %>% bind_cols(),
+        BIC_test = lapply(glasso_trained, `[[`, "BIC_test") %>% bind_cols()
+      )
+
+    cv_gls[["avg_loglik"]] <- rowMeans(cv_gls$loglik_test)
+    cv_gls[["sd_loglik"]] <- apply(cv_gls$loglik_test, MARGIN = 1, sd)
+
+    cv_gls[["avg_AIC"]] <- rowMeans(cv_gls$AIC_test)
+    cv_gls[["sd_AIC"]] <- apply(cv_gls$AIC_test, MARGIN = 1, sd)
+
+    cv_gls[["avg_BIC"]] <- rowMeans(cv_gls$BIC_test)
+    cv_gls[["sd_BIC"]] <- apply(cv_gls$BIC_test, MARGIN = 1, sd)
+
+    if (crit.cv == "loglik") {
+      cv_gls[["avg_errors"]] <- cv_gls[["avg_loglik"]]
+      cv_gls[["sd_errors"]] <- cv_gls[["sd_loglik"]]
+    }
+
+    if (crit.cv == "AIC") {
+      cv_gls[["avg_errors"]] <- cv_gls[["avg_AIC"]]
+      cv_gls[["sd_errors"]] <- cv_gls[["sd_AIC"]]
+    }
+
+    if (crit.cv == "BIC") {
+      cv_gls[["avg_errors"]] <- cv_gls[["avg_BIC"]]
+      cv_gls[["sd_errors"]] <- cv_gls[["sd_BIC"]]
+    }
 
 
     #optimal_rho <- glasso_trained[[1]]$rholist[which.min(glp[["avg_errors"]]) + 2]
@@ -316,6 +607,7 @@ cv_glasso <-
     gls_final <-
       glasso::glasso(
         s = s,
+        nobs = n,
         rho = optimal_rho$rho,
         thr = thr,
         maxit = maxit,
@@ -332,7 +624,9 @@ cv_glasso <-
     cv_gls$w <- gls_final$w
     rownames(cv_gls$w) <- colnames(cv_gls$w) <- colnames(X)
 
-    cv_gls$loglik <-
+    # loglik should be same as loglik.2
+    cv_gls$loglik <- gls_final$loglik
+    cv_gls$loglik.2 <-
       calc_loglik(
         n = nrow(cv_gls$X),
         wi = cv_gls$wi,
@@ -354,7 +648,6 @@ cv_glasso <-
     return(cv_gls)
   }
 
-
 #' Get glasso with rho
 #'
 #' @param cv_gls output of cv_glasso
@@ -367,6 +660,7 @@ snapshot_cv_glasso <- function(cv_gls, rho = NULL) {
 
   glasso::glasso(
     s = cv_gls$S,
+    nobs = nrow(cv_gls$X),
     rho = rho,
     thr = cv_gls$thr,
     maxit = cv_gls$maxit,
@@ -383,7 +677,10 @@ snapshot_cv_glasso <- function(cv_gls, rho = NULL) {
   #
   # glasso is supposed to calculate loglik but somehow, it didn't.
   #
-  gls$loglik <- calc_loglik(n = nrow(cv_gls$X), wi = gls$wi, S = cv_gls$S, rho = rho)
+  # Note: actually, it was because nobs was not specified previously.
+  #       now that it is, loglik should be computed.
+  #
+  gls$loglik.2 <- calc_loglik(n = nrow(cv_gls$X), wi = gls$wi, S = cv_gls$S, rho = rho)
 
   gls
 }
@@ -637,9 +934,83 @@ to_PD_matrix <- function(s, diagonal = TRUE, rho = max(abs(s))) {
     init = (1 - alpha) * s
     diag(init) = diag(s)
   }
+
   init
 }
 
+find_optimal_glasso <-
+  function(cv_gls, crit.cv) {
+
+    if (crit.cv == "loglik") {
+      cv_gls$avg_errors <- cv_gls$avg_loglik
+      cv_gls$sd_errors <- cv_gls$sd_loglik
+    }
+
+    if (crit.cv == "AIC") {
+      cv_gls$avg_errors <- cv_gls$avg_AIC
+      cv_gls$sd_errors <- cv_gls$sd_AIC
+    }
+
+    if (crit.cv == "BIC") {
+      cv_gls$avg_errors <- cv_gls$avg_BIC
+      cv_gls$sd_errors <- cv_gls$sd_BIC
+    }
+
+    optimal_rho <-
+      find_optimal_rho(
+        rholist = cv_gls$rho,
+        avg_errors = cv_gls$avg_errors,
+        sd_errors = cv_gls$sd_errors
+      )
+
+    if (optimal_rho$rho_loc_min == 1 ||
+        optimal_rho$rho_loc_min == length(cv_gls$rho)) {
+      optimal_rho$found <- FALSE
+      warning(
+        sprintf(
+          "Mininum 'rho' is found at the boundary, loc_min = %d.  Consider extending the range of 'rho'...",
+          optimal_rho$rho.loc_min
+        ),
+        optimal_rho$rho_loc_min
+      )
+    } else {
+      optimal_rho$found <- TRUE
+    }
+
+
+    optimal_rho$crit.cv <- crit.cv
+
+    cv_gls$optimal <- optimal_rho
+
+    # final estimate
+    gls_final <-
+      glasso::glasso(
+        s = cv_gls$S,
+        nobs = nrow(cv_gls$X),
+        rho = optimal_rho$rho,
+        thr = cv_gls$thr,
+        maxit = cv_gls$maxit,
+        approx = cv_gls$approx,
+        penalize.diagonal = cv_gls$penalize.diagonal,
+        start = "warm",
+        w.init = cv_gls$w_init,
+        wi.init = cv_gls$wi_init
+      )
+
+    cv_gls$wi <- gls_final$wi
+    rownames(cv_gls$wi) <- colnames(cv_gls$wi) <- colnames(cv_gls$X)
+
+    cv_gls$w <- gls_final$w
+    rownames(cv_gls$w) <- colnames(cv_gls$w) <- colnames(cv_gls$X)
+
+    cv_gls$loglik <- -gls_final$loglik
+    cv_gls$niter <- gls_final$niter
+
+    cv_gls$crit.cv <- crit.cv
+
+    # return
+    return(cv_gls)
+  }
 
 find_optimal_rho <-
   function(rholist,
@@ -681,7 +1052,7 @@ find_optimal_rho <-
 
 
 
-calc_loglik <- function(n, wi, S, rho, penalize_diagonal = TRUE) {
+ calc_loglik <- function(n, wi, S, rho, penalize_diagonal = TRUE) {
   # option to penalize diagonal
   if (penalize_diagonal) {
     C = 1

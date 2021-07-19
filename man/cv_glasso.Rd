@@ -9,9 +9,10 @@ cv_glasso(
   name = "cv_glasso",
   K = 5,
   iter_cv = 10,
-  rholist = NULL,
+  rholist = NA,
   thr = 1e-04,
   maxit = 10000,
+  crit.cv = c("BIC", "AIC", "loglik"),
   approx = FALSE,
   penalize_diagonal = TRUE,
   rho_min_ratio = 0.01,
@@ -34,6 +35,8 @@ cv_glasso(
 \item{thr}{threshold for convergence in \code{\link{glasso}}}
 
 \item{maxit}{passed to \code{\link{glasso}}}
+
+\item{crit.cv}{cross validation criterion (\code{BIC}, \code{AIC}, or \code{loglik}). Defaults to \code{BIC}.}
 
 \item{approx}{passed to \code{\link{glasso}}}
 
