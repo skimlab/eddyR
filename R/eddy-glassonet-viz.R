@@ -5,26 +5,33 @@ ggplot.cv_glasso <- function(glp) {
   plot.cv_glasso(glp)
 }
 
+
 plot.cv_glasso <- function(glp) {
-  df <- data.frame(rho = glp$rho,
-                   avg_error = glp$avg_errors,
-                   sd = glp$sd_errors)
+  df <- data.frame(
+    rho = glp$rho,
+    avg_error = glp$avg_errors,
+    sd = glp$sd_errors
+  )
   ggplot(df,
          aes(x = rho, y = avg_error)) +
     geom_point() +
-    geom_errorbar(aes(ymin=avg_error-sd, ymax=avg_error+sd),
-                  position=position_dodge(0.05)) +
+    geom_errorbar(aes(ymin = avg_error - sd, ymax = avg_error + sd),
+                  position = position_dodge(0.05)) +
     geom_path() +
-    geom_vline(xintercept = glp$optimal$rho,
-               linetype="dotted",
-               color = "blue") ->
+    geom_vline(
+      xintercept = glp$optimal_rho$rho,
+      linetype = "dotted",
+      color = "blue"
+    ) ->
     gp
 
-  if (glp$optimal$method == "sd") {
+  if (glp$optimal_rho$method == "sd") {
     gp <- gp +
-      geom_hline(yintercept = glp$sd_errors[glp$optimal$rho_loc_min] + glp$avg_errors[glp$optimal$rho_loc_min],
-                 linetype="dotted",
-                 color = "blue")
+      geom_hline(
+        yintercept = glp$sd_errors[glp$optimal_rho$rho_loc_min] + glp$avg_errors[glp$optimal_rho$rho_loc_min],
+        linetype = "dotted",
+        color = "blue"
+      )
   }
 
   gp + scale_x_log10()

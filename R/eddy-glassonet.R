@@ -601,7 +601,7 @@ cv_glasso_obsolete <-
       optimal_rho$found <- TRUE
     }
 
-    cv_gls[["optimal"]] <- optimal_rho
+    cv_gls[["optimal_rho"]] <- optimal_rho
 
     # final estimate
     gls_final <-
@@ -631,7 +631,7 @@ cv_glasso_obsolete <-
         n = nrow(cv_gls$X),
         wi = cv_gls$wi,
         S = cv_gls$S,
-        cv_gls$optimal$rho
+        cv_gls$optimal_rho$rho
       )
 
     cv_gls$niter <- gls_final$niter
@@ -655,7 +655,7 @@ cv_glasso_obsolete <-
 #' @return glasso
 snapshot_cv_glasso <- function(cv_gls, rho = NULL) {
   if (is.null(rho)) {
-    rho <- cv_gls$optimal[["rho"]]
+    rho <- cv_gls$optimal_rho[["rho"]]
   }
 
   glasso::glasso(
@@ -963,24 +963,38 @@ find_optimal_glasso <-
         sd_errors = cv_gls$sd_errors
       )
 
-    if (optimal_rho$rho_loc_min == 1 ||
-        optimal_rho$rho_loc_min == length(cv_gls$rho)) {
-      optimal_rho$found <- FALSE
-      warning(
-        sprintf(
-          "Mininum 'rho' is found at the boundary, loc_min = %d.  Consider extending the range of 'rho'...",
-          optimal_rho$rho.loc_min
-        ),
-        optimal_rho$rho_loc_min
-      )
-    } else {
-      optimal_rho$found <- TRUE
-    }
 
+    if (optimal_rho$method == "sd") {
+      if (is.na(optimal_rho$rho)) {
+        optimal_rho$rho_loc <- length(cv_gls$rho)
+        optimal_rho$rho <- cv_gls$rho[length(cv_gls$rho)-1]
+        optimal_rho$found <- FALSE
+        warning(
+          "Optimal 'rho' using 'sd' method is not found.  Consider extending the range of 'rho'..."
+        )
+      }
+      else {
+        optimal_rho$found <- TRUE
+      }
+    } else {
+      if (optimal_rho$rho_loc_min == 1 ||
+          optimal_rho$rho_loc_min == length(cv_gls$rho)) {
+        optimal_rho$found <- FALSE
+        warning(
+          sprintf(
+            "Mininum 'rho' is found at the boundary, loc_min = %d.  Consider extending the range of 'rho'...",
+            optimal_rho$rho.loc_min
+          ),
+          optimal_rho$rho_loc_min
+        )
+      } else {
+        optimal_rho$found <- TRUE
+      }
+    }
 
     optimal_rho$crit.cv <- crit.cv
 
-    cv_gls$optimal <- optimal_rho
+    cv_gls$optimal_rho <- optimal_rho
 
     # final estimate
     gls_final <-
@@ -1023,19 +1037,19 @@ find_optimal_rho <-
     min_rho <- rholist[min_loc]
     min_sd <- sd_errors[min_loc]
 
-    x <- avg_errors - avg_errors[min_loc]
-    x[1:min_loc] <- 0
+    diff_errors <- avg_errors - avg_errors[min_loc]
+    diff_errors[1:min_loc] <- 0
 
-    sd_loc <- min(which(x > min_sd), na.rm = T)
+    sd_loc <- min(which(diff_errors > min_sd), na.rm = T)
 
-    choice <- pmatch(method[1], c("sd", "min_error"))
+    method <- method[1]
 
-    switch(
-      choice,
-      "1" = list(rholist[sd_loc], sd_loc, c("sd", "min_error")[choice]),
-      "2" = list(rholist[min_loc], min_loc, c("sd", "min_error")[choice])
-    ) ->
-      res
+    res <-
+      switch(
+        method,
+        "sd" = list(rholist[sd_loc], sd_loc, "sd"),
+        "min_error" = list(rholist[min_loc], min_loc, "min_error")
+      )
 
     names(res) <- c("rho", "rho_loc", "method")
 
