@@ -63,7 +63,7 @@ calc_DDN_score <- function(ddn_tbl) {
     ),
     rewiring = 1 - n_edges_common / n_edges,
     n_nodes = n_nodes,
-    n_edges_c1 = n_edges_C1,
+    n_edges_C1 = n_edges_C1,
     n_edges_C2 = n_edges_C2,
     n_edges_common = n_edges_common,
     n_edges = n_edges
