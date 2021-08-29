@@ -115,14 +115,18 @@ post_proc_EDDY_DDNs <-
         unlist() %>% unname() ->
         pathway_list
 
-      eddy_post_proc_list[["DDNs"]] %>%
-        filter(pathway %in% pathway_list) %>%
-        plot_DDN_tbl_graph(
-          show_mediators = "both",
-          show_node_label = FALSE,
-          show_pathway_group = TRUE
-        ) ->
-        eddy_post_proc_list[["DDN_graph_aggregated_p0_05"]]
+      if (length(pathway_list) > 0) {
+        eddy_post_proc_list[["DDNs"]] %>%
+          filter(pathway %in% pathway_list) %>%
+          plot_DDN_tbl_graph(
+            show_mediators = "both",
+            show_node_label = FALSE,
+            show_pathway_group = TRUE
+          ) ->
+          eddy_post_proc_list[["DDN_graph_aggregated_p0_05"]]
+      } else {
+        eddy_post_proc_list[["DDN_graph_aggregated_p0_05"]] <- NA
+      }
 
     }
 
@@ -204,6 +208,10 @@ post_proc_EDDY_glasso <-
       to_glasso_DDN_summary(glasso_DDN_list) %>%
       filter(prob < p_val_threshold_loose)
 
+    if (nrow(summary_tbl) == 0) {
+      stop("No DDN with p-value < 0.1...  Nothing to process.")
+    }
+
     # DDNs, prob < 0.10
     pathway_list <-
       summary_tbl %>%
@@ -264,27 +272,33 @@ write_eddy_postproc_DDN_to_pdf <- function(eddy_postproc, output_dir = ".", fig.
   dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
 
   if ("list_DDN_graph" %in% names(eddy_postproc)) {
-    for (nn in names(eddy_postproc$list_DDN_graph)) {
-      # some pathway names has "/" and need to be fixed.
-      ddn_file_name <- sprintf("DDN_%s.pdf", nn)
-      ddn_file_name <- gsub("/+", "_", ddn_file_name)
+    if (!is.na(eddy_postproc[["list_DDN_graph"]])) {
+      for (nn in names(eddy_postproc$list_DDN_graph)) {
+        # some pathway names has "/" and need to be fixed.
+        ddn_file_name <- sprintf("DDN_%s.pdf", nn)
+        ddn_file_name <- gsub("/+", "_", ddn_file_name)
 
-      ggsave(filename = file.path(output_dir, ddn_file_name),
-             plot = eddy_postproc$list_DDN_graph[[nn]],
-             width = fig.width, height = fig.height)
+        ggsave(filename = file.path(output_dir, ddn_file_name),
+               plot = eddy_postproc$list_DDN_graph[[nn]],
+               width = fig.width, height = fig.height)
+      }
     }
   }
 
   if ("DDN_graph_aggregated_p0_05" %in% names(eddy_postproc)) {
-    ggsave(filename = file.path(output_dir, "aggregated_DDNs_p0_05.pdf"),
-           plot = eddy_postproc$DDN_graph_aggregated_p0_05,
-           width = 2*fig.width, height = 2*fig.height)
+    if (!is.na(eddy_postproc[["DDN_graph_aggregated_p0_05"]])) {
+      ggsave(filename = file.path(output_dir, "aggregated_DDNs_p0_05.pdf"),
+             plot = eddy_postproc$DDN_graph_aggregated_p0_05,
+             width = 2*fig.width, height = 2*fig.height)
+    }
   }
 
   if ("DDN_graph_aggregated" %in% names(eddy_postproc)) {
-    ggsave(filename = file.path(output_dir, "aggregated_DDNs.pdf"),
-           plot = eddy_postproc$DDN_graph_aggregated,
-           width = 2*fig.width, height = 2*fig.height)
+    if (!is.na(eddy_postproc[["DDN_graph_aggregated"]])) {
+      ggsave(filename = file.path(output_dir, "aggregated_DDNs.pdf"),
+             plot = eddy_postproc$DDN_graph_aggregated,
+             width = 2*fig.width, height = 2*fig.height)
+    }
   }
 }
 
@@ -321,16 +335,24 @@ write_eddy_postproc_DDN_to_json <- function(eddy_postproc, json_dir = ".") {
     unlist %>% unname ->
     pathway_list
 
-  eddy_postproc$DDNs %>%
-    filter(pathway %in% pathway_list) %>%
-    ddn_to_json(filepath = file.path(json_dir, "aggregated_p0_05.json"))
-
   aggregated_markdown <-
     paste(
-      sprintf("# %s", paste(eddy_postproc$conditions, collapse = " vs ")),
+      sprintf("# %s\n", paste(eddy_postproc$conditions, collapse = " vs ")),
       "### Aggregated DDNs (could be slow)\n",
-      "<a href=\"ddngraph.html?DDN=aggregated_p0_05\" target=\"_blank\">DDNs (P.val < 0.05)</a>",
       sep = "\n")
+
+  if (length(pathway_list) > 0) {
+    eddy_postproc$DDNs %>%
+      filter(pathway %in% pathway_list) %>%
+      ddn_to_json(filepath = file.path(json_dir, "aggregated_p0_05.json"))
+
+    aggregated_markdown <-
+      paste(
+        aggregated_markdown,
+        "<a href=\"ddngraph.html?DDN=aggregated_p0_05\" target=\"_blank\">DDNs (P.val < 0.05)</a>",
+        sep = "\n"
+      )
+  }
 
   if (p_val_max > 0.05) {
     eddy_postproc$DDNs %>%

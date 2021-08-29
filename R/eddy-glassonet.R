@@ -794,7 +794,7 @@ to_glasso_DDN_summary <- function(glasso_DDN_list, selected_names = NULL) {
   DDN_summary %>%
     dplyr::rename(prob.raw = prob) %>%
     mutate(prob.adj = p.adjust(prob.raw)) %>%
-    mutate(prob = prob.adj) %>%    # set prob to prob.adj for glassnoet
+    mutate(prob = prob.adj) %>%    # set prob to prob.adj for glassonet
     arrange(prob, -rewiring)
 }
 
