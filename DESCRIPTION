@@ -29,6 +29,6 @@ Suggests:
     future.apply,
     rmarkdown,
     testthat (>= 3.0.0)
-RoxygenNote: 7.1.1
+RoxygenNote: 7.1.2
 VignetteBuilder: knitr
 Config/testthat/edition: 3

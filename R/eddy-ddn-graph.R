@@ -124,20 +124,30 @@ compute_DDN_mediator_specificity <- function(ddn, p_val.cutoff = 0.05, use_adjus
       compute_node_mediator_specificity_pbinom(p_background = Ec/(Es+Ec))
   }) %>% unlist -> pbinom_vals
 
-  data.frame(name = nodes,
-             mediator_specificity_phyper_val = phyper_vals,
-             mediator_specificity_pbinom_val = pbinom_vals,
-             mediator_specificity_phyper_val.fdr = p.adjust(phyper_vals, method = "fdr"),
-             mediator_specificity_pbinom_val.fdr = p.adjust(pbinom_vals, method = "fdr")) %>%
-    mutate(mediator_specificity_p_val = ifelse(use_adjusted_p_value,   # phyper preferred over pbinom
-                                               mediator_specificity_phyper_val.fdr,
-                                               mediator_specificity_phyper_val)) %>%
+  df <- data.frame(
+    name = nodes,
+    mediator_specificity_phyper_val = phyper_vals,
+    mediator_specificity_pbinom_val = pbinom_vals,
+    mediator_specificity_phyper_val.fdr = p.adjust(phyper_vals, method = "fdr"),
+    mediator_specificity_pbinom_val.fdr = p.adjust(pbinom_vals, method = "fdr")
+  )
+
+  if (use_adjusted_p_value) {
+    df$mediator_specificity_p_val <- df$mediator_specificity_phyper_val.fdr
+  } else {
+    df$mediator_specificity_p_val <- df$mediator_specificity_phyper_val
+  }
+
+  df %>%
     mutate(mediator_specificity = mediator_specificity_p_val < p_val.cutoff)
 }
 
 
 #' Compute essentiality mediators for DDN
 compute_DDN_mediator_essentiality <- function(ddn, percentile_cutoff = 0.05) {
+  # lower casing "common", "Common", "COMMON", ...
+  ddn$condition <- sub("common", "common", ddn$condition, ignore.case = TRUE)
+
   conditions <- unique(setdiff(ddn$condition, "common"))
 
   ddn %>%

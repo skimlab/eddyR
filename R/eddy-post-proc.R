@@ -164,8 +164,8 @@ post_proc_EDDY_folder <-
       group_by(pathway) %>%
       summarise(
         n_nodes = length(union(node_src, node_dst)),
-        n_edges_C1 = sum(tolower(condition) != conditions[1]),
-        n_edges_C2 = sum(tolower(condition) != conditions[2]),
+        n_edges_C1 = sum(tolower(condition) != tolower(conditions[1])),
+        n_edges_C2 = sum(tolower(condition) != tolower(conditions[2])),
         n_edges_common = sum(tolower(condition) == "common"),
         rewiring = sum(tolower(condition) != "common") / n(),
         known_dependency = sum(prior != "NONE") / n()
@@ -209,7 +209,7 @@ post_proc_EDDY_glasso <-
       filter(prob < p_val_threshold_loose)
 
     if (nrow(summary_tbl) == 0) {
-      stop("No DDN with p-value < 0.1...  Nothing to process.")
+      return(NULL)
     }
 
     # DDNs, prob < 0.10
