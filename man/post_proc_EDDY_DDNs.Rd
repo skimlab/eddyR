@@ -8,6 +8,7 @@
 \usage{
 post_proc_EDDY_DDNs(
   DDNs,
+  summary_title = NA,
   summary_tbl,
   mediator.type = "both",
   essentiality_cutoff = 0.05,
@@ -19,6 +20,7 @@ post_proc_EDDY_DDNs(
 
 post_proc_EDDY_folder(
   eddy_run_dir,
+  summary_title = NA,
   mediator.type = "both",
   essentiality_cutoff = 0.05,
   specificity_cutoff = 0.05,
@@ -29,6 +31,7 @@ post_proc_EDDY_folder(
 
 post_proc_EDDY_glasso(
   glasso_DDN_list,
+  summary_title = NA,
   mediator.type = "both",
   essentiality_cutoff = 0.05,
   specificity_cutoff = 0.05,

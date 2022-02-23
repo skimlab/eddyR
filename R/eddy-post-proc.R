@@ -19,6 +19,7 @@
 #'         5) aggregated DDN graph (p < 0.05)
 post_proc_EDDY_DDNs <-
   function(DDNs,
+           summary_title = NA,
            summary_tbl,
            mediator.type = "both",
            essentiality_cutoff = 0.05,
@@ -46,10 +47,10 @@ post_proc_EDDY_DDNs <-
                                        essentiality_cutoff = essentiality_cutoff,
                                        specificity_cutoff = specificity_cutoff)
 
-    mediator_tbl %>%
+    summary_tbl <-
+      mediator_tbl %>%
       flatten_DDN_mediators() %>%
-      left_join(summary_tbl, ., by = "pathway") ->
-      summary_tbl
+      left_join(summary_tbl, ., by = "pathway")
 
     eddy_post_proc_list <- list(
       summary = summary_tbl,
@@ -60,28 +61,38 @@ post_proc_EDDY_DDNs <-
     )
 
     # pathway name tidy up
-    eddy_post_proc_list[["summary"]] %>%
-      dplyr::mutate(pathway_orig = pathway) ->
-      eddy_post_proc_list[["summary"]]
+    eddy_post_proc_list[["summary"]] <-
+      eddy_post_proc_list[["summary"]] %>%
+      dplyr::mutate(pathway_orig = pathway)
 
-    eddy_post_proc_list[["DDNs"]] %>%
-      dplyr::mutate(pathway_orig = pathway) ->
-      eddy_post_proc_list[["DDNs"]]
+
+    eddy_post_proc_list[["DDNs"]] <-
+      eddy_post_proc_list[["DDNs"]] %>%
+      dplyr::mutate(pathway_orig = pathway)
+
 
     if (!isTRUE(is.na(db_name_prefix))) {
-      eddy_post_proc_list[["summary"]] %>%
-        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) ->
-        eddy_post_proc_list[["summary"]]
+      eddy_post_proc_list[["summary"]] <-
+        eddy_post_proc_list[["summary"]] %>%
+        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix))
 
-      eddy_post_proc_list[["DDNs"]] %>%
-        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix)) ->
-        eddy_post_proc_list[["DDNs"]]
+
+      eddy_post_proc_list[["DDNs"]] <-
+        eddy_post_proc_list[["DDNs"]] %>%
+        dplyr::mutate(pathway = db_name_cleanup(pathway_orig, db_name = db_name_prefix))
     }
 
-    eddy_post_proc_list[["summary"]] %>%
+    eddy_post_proc_list[["summary"]] <-
+      eddy_post_proc_list[["summary"]] %>%
       dplyr::relocate(pathway, .before = n_nodes) %>%
-      dplyr::relocate(pathway_orig, .after = last_col()) ->
-      eddy_post_proc_list[["summary"]]
+      dplyr::relocate(pathway_orig, .after = last_col())
+
+    eddy_post_proc_list[["summary_extended"]] <-
+      eddy_post_proc_list[["summary"]] %>%
+      mutate(specificity_mediators_html.l = add_GeneCard_link(specificity_mediators.l, style = "html"),
+             essentiality_mediators_html.l = add_GeneCard_link(essentiality_mediators.l, style = "html")) %>%
+      mutate(specificity_mediators_html = paste(specificity_mediators_html.l, collapse = ", "),
+             essentiality_mediators_html = paste(essentiality_mediators_html.l, collapse = ", "))
 
     if (create_ddn_graph) {
       eddy_post_proc_list[["list_DDN_graph"]] <-
@@ -109,11 +120,10 @@ post_proc_EDDY_DDNs <-
         )
 
       # DDNs, prob < 0.05
-      eddy_post_proc_list[["summary"]] %>%
+      pathway_list <-
+        eddy_post_proc_list[["summary"]] %>%
         filter(prob < 0.05) %>%
-        select(pathway) %>%
-        unlist() %>% unname() ->
-        pathway_list
+        pull(pathway)
 
       if (length(pathway_list) > 0) {
         eddy_post_proc_list[["DDNs"]] %>%
@@ -127,8 +137,25 @@ post_proc_EDDY_DDNs <-
       } else {
         eddy_post_proc_list[["DDN_graph_aggregated_p0_05"]] <- NA
       }
-
     }
+
+    summary_title_markdown <-
+      ifelse (
+        is.na(summary_title),
+        sprintf("# %s\n", paste(eddy_post_proc_list$conditions, collapse = " vs ")),
+        sprintf(
+          "# %s\n## %s\n",
+          summary_title,
+          paste(eddy_post_proc_list$conditions, collapse = " vs ")
+        )
+      )
+
+    eddy_post_proc_list$markdown <- list(summary_title = summary_title_markdown)
+
+    eddy_post_proc_list <-
+      eddy_post_proc_list %>%
+      add_summary_table_markdown_to_eddy_postproc() %>%
+      add_aggregated_markdown_to_eddy_postproc()
 
     eddy_post_proc_list
   }
@@ -139,6 +166,7 @@ post_proc_EDDY_DDNs <-
 #' @rdname post_proc_EDDY_DDNs
 post_proc_EDDY_folder <-
   function(eddy_run_dir,
+           summary_title = NA,
            mediator.type = "both",
            essentiality_cutoff = 0.05,
            specificity_cutoff = 0.05,
@@ -155,12 +183,13 @@ post_proc_EDDY_folder <-
     # (results_tbl <- mutate(results_tbl, Pathway = reactome_cleanup(Pathway)))
 
     DDNs <- read_DDNs(eddy_run_dir) %>%
-      filter(condition != "Neither")
+      filter(tolower(condition) != "neither")
 
     conditions <- setdiff(unique(DDNs$condition),
                           c("common", "Common", "COMMON", "both", "Both", "BOTH"))
 
-    DDNs %>%
+    summary_tbl <-
+      DDNs %>%
       group_by(pathway) %>%
       summarise(
         n_nodes = length(union(node_src, node_dst)),
@@ -173,11 +202,12 @@ post_proc_EDDY_folder <-
       left_join(results_tbl, by = c("pathway" = "Pathway")) %>%
       rename(n_nodeset = n) %>%
       filter(!is.na(prob)) %>%
-      arrange(prob) ->
-      summary_tbl
+      arrange(prob)
+
 
     post_proc_EDDY_DDNs(
       DDNs = DDNs,
+      summary_title = summary_title,
       summary_tbl = summary_tbl,
       mediator.type = mediator.type,
       essentiality_cutoff = essentiality_cutoff,
@@ -193,6 +223,7 @@ post_proc_EDDY_folder <-
 #' @rdname post_proc_EDDY_DDNs
 post_proc_EDDY_glasso <-
   function(glasso_DDN_list,
+           summary_title = NA,
            mediator.type = "both",
            essentiality_cutoff = 0.05,
            specificity_cutoff = 0.05,
@@ -219,13 +250,14 @@ post_proc_EDDY_glasso <-
       select(pathway) %>%
       unlist() %>% unname()
 
-    DDNs <- to_glasso_DDN_tbl(glasso_DDN_list)
-
-    DDNs %>%
-      filter(pathway %in% pathway_list) -> DDNs
+    DDNs <-
+      glasso_DDN_list %>%
+      to_glasso_DDN_tbl() %>%
+      filter(pathway %in% pathway_list)
 
     post_proc_EDDY_DDNs(
       DDNs = DDNs,
+      summary_title = summary_title,
       summary_tbl = summary_tbl,
       mediator.type = mediator.type,
       essentiality_cutoff = essentiality_cutoff,
@@ -235,6 +267,104 @@ post_proc_EDDY_glasso <-
       db_name_prefix = db_name_prefix
     )
   }
+
+
+#' Add aggregated markdown to EDDY post_proc
+#'
+#' @param eddy_postproc list: ...
+#' @return eddy_postproc list: ...
+add_aggregated_markdown_to_eddy_postproc <- function(eddy_postproc) {
+
+  # pathways to process
+  pathway_list <-
+    eddy_postproc$summary %>%
+    filter(prob < 0.05) %>%
+    pull(pathway)
+
+
+  p_val_max <- max(eddy_postproc$summary$prob, na.rm = TRUE)
+
+  aggregated_markdown <-
+    "### Aggregated DDNs (could be slow)\n"
+
+  if (length(pathway_list) > 0) {
+    aggregated_markdown <-
+      paste(
+        aggregated_markdown,
+        "<a href=\"ddngraph.html?DDN=aggregated_p0_05\" target=\"_blank\">DDNs (P.val < 0.05)</a>",
+        sep = "\n"
+      )
+  }
+
+  if (p_val_max > 0.05) {
+    aggregated_markdown <-
+      paste(
+        aggregated_markdown,
+        "| <a href=\"ddngraph.html?DDN=aggregated\" target=\"_blank\">DDNs (Full)</a>\n",
+        sep = "\n")
+  }
+
+  # to be safe, separating
+  aggregated_markdown <-
+    paste(
+      aggregated_markdown,
+      "\n",
+      sep = "\n")
+
+  # eddy_postproc[["aggregated_markdown"]] <- aggregated_markdown
+  if (!is.null(eddy_postproc$markdown)) {
+    eddy_postproc$markdown$aggregated <-
+      aggregated_markdown
+  } else {
+    eddy_postproc$markdown <- list(aggregated = aggregated_markdown)
+  }
+
+  eddy_postproc
+}
+
+
+#' Add summary table in markdown format
+#'
+#' @param eddy_postproc list: ...
+#' @return eddy_postproc list: ...
+add_summary_table_markdown_to_eddy_postproc <- function(eddy_postproc) {
+
+  summary_table_markdown <-
+    eddy_postproc$summary_extended %>%
+    mutate(DDN = add_DDN_link(pathway, style = "html")) %>%
+    mutate(pathway = add_MSigDB_link(pathway = pathway, pathway_orig = pathway_orig, style = "html")) %>%
+    mutate(known_dependency = known_dependency*100, rewiring = rewiring*100) %>%
+    select(
+      pathway,
+      n_nodes,
+      known_dependency,
+      rewiring,
+      prob,
+      essentiality_mediators_html.l,
+      specificity_mediators_html.l,
+      DDN
+    ) %>%
+    dplyr::rename(
+      n = n_nodes,
+      P.value = prob,
+      'known edges (%)' = known_dependency,
+      'rewiring (%)' = rewiring,
+      'essentiality mediators' = essentiality_mediators_html.l,
+      'specificity mediators' = specificity_mediators_html.l
+    ) %>%
+    arrange(P.value) %>%
+    knitr::kable(format = "markdown") %>%
+    gsub("[' ']+,", ",", .)      # to get rid of extra spaces between words
+
+  if (!is.null(eddy_postproc$markdown)) {
+    eddy_postproc$markdown$summary <-
+      summary_table_markdown
+  } else {
+    eddy_postproc$markdown <- list(summary = summary_table_markdown)
+  }
+
+  eddy_postproc
+}
 
 
 #' Write EDDY post-processed results into tables
@@ -303,11 +433,12 @@ write_eddy_postproc_DDN_to_pdf <- function(eddy_postproc, output_dir = ".", fig.
 }
 
 
+
+
 #' Write EDDY DDNs into JSON
 #'
 #' @param eddy_postproc list: ...
 #' @param json_dir string: ...
-#' @return ...s
 write_eddy_postproc_DDN_to_json <- function(eddy_postproc, json_dir = ".") {
   # create json_dir.  If it already exists, show warnings.
   # shall we remove all the files if the folder exists before moving forward?
@@ -329,123 +460,21 @@ write_eddy_postproc_DDN_to_json <- function(eddy_postproc, json_dir = ".") {
   #
   p_val_max <- max(eddy_postproc$summary$prob, na.rm = TRUE)
 
-  eddy_postproc$summary %>%
+  pathway_list <-
+    eddy_postproc$summary %>%
     filter(prob < 0.05) %>%
-    select(pathway) %>%
-    unlist %>% unname ->
-    pathway_list
-
-  aggregated_markdown <-
-    paste(
-      sprintf("# %s\n", paste(eddy_postproc$conditions, collapse = " vs ")),
-      "### Aggregated DDNs (could be slow)\n",
-      sep = "\n")
+    pull(pathway)
 
   if (length(pathway_list) > 0) {
     eddy_postproc$DDNs %>%
       filter(pathway %in% pathway_list) %>%
       ddn_to_json(filepath = file.path(json_dir, "aggregated_p0_05.json"))
-
-    aggregated_markdown <-
-      paste(
-        aggregated_markdown,
-        "<a href=\"ddngraph.html?DDN=aggregated_p0_05\" target=\"_blank\">DDNs (P.val < 0.05)</a>",
-        sep = "\n"
-      )
   }
 
   if (p_val_max > 0.05) {
     eddy_postproc$DDNs %>%
       ddn_to_json(filepath = file.path(json_dir, "aggregated.json"))
-
-    aggregated_markdown <-
-      paste(
-        aggregated_markdown,
-        "| <a href=\"ddngraph.html?DDN=aggregated\" target=\"_blank\">DDNs (Full)</a>\n",
-        sep = "\n")
   }
-
-  # to be safe, separating
-  aggregated_markdown <-
-    paste(
-      aggregated_markdown,
-      "\n",
-      sep = "\n")
-
-
-  eddy_postproc[["summary"]] %>%
-    mutate(specificity_mediators_html.l = add_GeneCard_link(specificity_mediators.l, style = "html"),
-           essentiality_mediators_html.l = add_GeneCard_link(essentiality_mediators.l, style = "html")) %>%
-    mutate(specificity_mediators_html = paste(specificity_mediators_html.l, collapse = ", "),
-           essentiality_mediators_html = paste(essentiality_mediators_html.l, collapse = ", ")) ->
-    eddy_postproc[["summary"]]
-
-  eddy_postproc[["aggregated_markdown"]] <- aggregated_markdown
-
-  eddy_postproc
-}
-
-#' @rdname write_eddy_postproc_json
-#' Deprecated
-obsolete_write_eddy_glasso_postproc_DDN_to_json <- function(eddy_postproc, json_dir = ".") {
-  # create json_dir.  If it already exists, show warnings.
-  # shall we remove all the files if the folder exists before moving forward?
-  dir.create(json_dir, showWarnings = TRUE, recursive = TRUE)
-
-  #
-  pathway_list <- unique(eddy_postproc$DDNs$pathway)
-
-  for (a_pathway in pathway_list) {
-    # some pathway names has "/" and need to be fixed.
-    json_file_name <- sprintf("DDN_%s.json", a_pathway)
-    json_file_name <- gsub("/+", "_", json_file_name)
-
-    eddy_postproc$DDNs %>%
-      filter(pathway == a_pathway) %>%
-      ddn_to_json(filepath = file.path(json_dir, json_file_name))
-  }
-
-  #
-  p_val_max <- max(eddy_postproc$summary$prob.adj)
-
-  eddy_postproc$summary %>%
-    filter(prob.adj < 0.05) %>%
-    select(pathway) %>%
-    unlist %>% unname ->
-    pathway_list
-
-  eddy_postproc$DDNs %>%
-    filter(pathway %in% pathway_list) %>%
-    ddn_to_json(filepath = file.path(json_dir, "aggregated_p0_05.json"))
-
-  aggregated_markdown <-
-    paste(
-      "# C1 vs C2\n",
-      "### Aggregated DDNs (could be slow)\n",
-      "<a href=\"ddngraph.html?DDN=aggregated_p0_05\" target=\"_blank\">DDNs (P.val < 0.05)</a>",
-      sep = "\n")
-
-  if (p_val_max > 0.05) {
-    eddy_postproc$DDNs %>%
-      ddn_to_json(filepath = file.path(json_dir, "aggregated.json"))
-
-    aggregated_markdown <-
-      paste(
-        aggregated_markdown,
-        "| <a href=\"ddngraph.html?DDN=aggregated\" target=\"_blank\">DDNs (Full)</a>\n",
-        sep = "\n")
-  }
-
-  eddy_postproc[["summary"]] %>%
-    mutate(specificity_mediators_html.l = add_GeneCard_link(specificity_mediators.l, style = "html"),
-           essentiality_mediators_html.l = add_GeneCard_link(essentiality_mediators.l, style = "html")) %>%
-    mutate(specificity_mediators_html = paste(specificity_mediators_html.l, collapse = ", "),
-           essentiality_mediators_html = paste(essentiality_mediators_html.l, collapse = ", ")) ->
-    eddy_postproc[["summary"]]
-
-  eddy_postproc[["aggregated_markdown"]] <- aggregated_markdown
-
-  eddy_postproc
 }
 
 
@@ -454,82 +483,16 @@ obsolete_write_eddy_glasso_postproc_DDN_to_json <- function(eddy_postproc, json_
 #' @param eddy_postproc list: ...
 #' @param output_dir string: ...
 #' @return ...s
-write_eddy_summary_table_markdown <- function(eddy_postproc, output_dir) {
-  # create json_dir.  If it already exists, show warnings.
-  # shall we remove all the files if the folder exists before moving forward?
-  dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
+write_eddy_postproc_summary_table_to_markdown <-
+  function(eddy_postproc, output_dir) {
+    # create json_dir.  If it already exists, show warnings.
+    # shall we remove all the files if the folder exists before moving forward?
+    dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
 
-  eddy_postproc$summary %>%
-    mutate(DDN = add_DDN_link(pathway, style = "html")) %>%
-    mutate(pathway = add_MSigDB_link(pathway = pathway, pathway_orig = pathway_orig, style = "html")) %>%
-    mutate(known_dependency = known_dependency*100, rewiring = rewiring*100) %>%
-    select(
-      pathway,
-      n_nodes,
-      known_dependency,
-      rewiring,
-      prob,
-      essentiality_mediators_html.l,
-      specificity_mediators_html.l,
-      DDN
-    ) %>%
-    dplyr::rename(
-      n = n_nodes,
-      P.value = prob,
-      'known edges (%)' = known_dependency,
-      'rewiring (%)' = rewiring,
-      'essentiality mediators' = essentiality_mediators_html.l,
-      'specificity mediators' = specificity_mediators_html.l
-    ) %>%
-    arrange(P.value) %>%
-    knitr::kable(format = "markdown") %>%
-    gsub("[' ']+,", ",", .) ->      # to get rid of extra spaces between words
-    summary_table_markdown
-
-  eddy_postproc[["summary_table_markdown"]] <-
-    c(eddy_postproc[["aggregated_markdown"]],
-      summary_table_markdown)
-
-  eddy_postproc[["summary_table_markdown"]] %>%
-    write(file = file.path(output_dir, "summary_table.md"))
-
-  eddy_postproc
-}
-
-
-#' Write summary table in markdown format
-#'
-#' @rdname write_eddy_summary_table_markdown
-#' Deprecated
-obsolete_write_eddy_glasso_summary_table_markdown <- function(eddy_postproc, output_dir) {
-  # create json_dir.  If it already exists, show warnings.
-  # shall we remove all the files if the folder exists before moving forward?
-  dir.create(output_dir, showWarnings = TRUE, recursive = TRUE)
-
-  eddy_postproc$summary %>%
-    select(pathway, n_actual, known_dependency, rewiring, prob.adj, essentiality_mediators_html.l, specificity_mediators_html.l) %>%
-    rename(n = n_actual,
-           P.value = prob.adj,
-           'known dependency (%)' = known_dependency,
-           'rewiring (%)' = rewiring,
-           'essentiality mediators' = essentiality_mediators_html.l,
-           'specificity mediators' = specificity_mediators_html.l) %>%
-    mutate(DDN = add_DDN_link(pathway, style = "html")) %>%
-    mutate(pathway = add_MSigDB_link(pathway, style = "html")) %>%
-    arrange(P.value) %>%
-    knitr::kable(format = "markdown") %>%
-    gsub("[' ']+,", ",", .) ->      # to get rid of extra spaces between words
-    summary_table_markdown
-
-  eddy_postproc[["summary_table_markdown"]] <-
-    c(eddy_postproc[["aggregated_markdown"]],
-      summary_table_markdown)
-
-  eddy_postproc[["summary_table_markdown"]] %>%
-    write(file = file.path(output_dir, "summary_table.md"))
-
-  eddy_postproc
-}
+    md <- eddy_postproc$markdown
+    c(md$summary_title, md$aggregated, md$summary) %>%
+      write(file = file.path(output_dir, "summary_table.md"))
+  }
 
 
 # Utility functions -----

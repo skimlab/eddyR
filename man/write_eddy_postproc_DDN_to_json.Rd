@@ -11,9 +11,6 @@ write_eddy_postproc_DDN_to_json(eddy_postproc, json_dir = ".")
 
 \item{json_dir}{string: ...}
 }
-\value{
-...s
-}
 \description{
 Write EDDY DDNs into JSON
 }
